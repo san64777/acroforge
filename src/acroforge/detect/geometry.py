@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from acroforge.detect.naming import label_from_cell_text
+
 
 @dataclass
 class Candidate:
@@ -181,4 +183,57 @@ def find_glyph_checkboxes(page: Any) -> list[Candidate]:
             continue
         seen.add(key)
         out.append(Candidate("checkbox", (x0, y0, x1, y1), 0.55))
+    return out
+
+
+# Table-cell sizing limits, in PDF points.
+_CELL_MIN_W = 30.0
+_CELL_MIN_H = 12.0
+_CELL_MAX_H = 60.0  # taller cells are instruction/paragraph blocks, not inputs
+_CELL_MAX_TXT = 120  # longer text means a paragraph/instruction cell, not an input
+
+
+def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
+    """Treat each suitable bordered table cell as a TEXT field candidate.
+
+    Real gov/credentialing forms are table grids where every input is a bordered
+    cell whose text is "LABEL / value". Uses pdfplumber `page.find_tables()`,
+    whose cells are `(x0, top, x1, bottom)` in TOP-DOWN coords; we convert to
+    bottom-up PDF points (inset 1pt) via `page.height`.
+
+    Returns `(Candidate, label_slug)` pairs; the slug is derived from the cell's
+    text (may be "" — callers supply a fallback). Cells that are too small/tall,
+    hold a checkbox glyph, or contain paragraph-length text are skipped.
+    """
+    out: list[tuple[Candidate, str]] = []
+    height = float(page.height)
+    seen: set[tuple[int, int]] = set()
+    for table in page.find_tables():
+        for cell in table.cells:
+            if cell is None:
+                continue
+            x0, top, x1, bottom = (float(cell[0]), float(cell[1]), float(cell[2]), float(cell[3]))
+            w = x1 - x0
+            h = bottom - top
+            if w < _CELL_MIN_W or h < _CELL_MIN_H or h > _CELL_MAX_H:
+                continue
+            try:
+                txt = page.crop(cell).extract_text() or ""
+            except Exception:
+                txt = ""
+            if any(g in txt for g in _CHECKBOX_GLYPHS):
+                continue  # checkbox cell, handled by find_boxes/find_glyph_checkboxes
+            if len(txt) > _CELL_MAX_TXT:
+                continue  # paragraph/instruction cell, not an input
+            rx0 = x0 + 1.0
+            rx1 = x1 - 1.0
+            ry0 = height - bottom + 1.0
+            ry1 = height - top - 1.0
+            if rx1 <= rx0 or ry1 <= ry0:
+                continue
+            key = (round(rx0), round(ry0))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((Candidate("text", (rx0, ry0, rx1, ry1), 0.5), label_from_cell_text(txt)))
     return out

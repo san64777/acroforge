@@ -24,6 +24,22 @@ def slugify(text: str) -> str:
     return _NON_ALNUM.sub("_", text.lower()).strip("_")
 
 
+def label_from_cell_text(text: str) -> str:
+    """Derive a field-name slug from a table cell's text (label line + value line).
+
+    Takes the FIRST line of the cell, then its first 3 whitespace words, and
+    slugifies them. If the slug is empty or too long (> _MAX_LABEL_LEN), it is
+    truncated to its first 3 `_`-parts. Returns "" if nothing usable; callers
+    supply their own fallback.
+    """
+    first_line = text.strip().splitlines()[0] if text.strip() else ""
+    words = first_line.split()[:3]
+    slug = slugify(" ".join(words))
+    if not slug or len(slug) > _MAX_LABEL_LEN:
+        slug = "_".join(slug.split("_")[:3])
+    return slug
+
+
 def _bands_overlap(a0: float, a1: float, b0: float, b1: float, tol: float) -> bool:
     """True if [a0,a1] and [b0,b1] overlap, allowing `tol` points of slack."""
     return (min(a1, b1) - max(a0, b0)) >= -tol

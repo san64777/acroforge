@@ -5,7 +5,12 @@ from typing import Any
 
 import pdfplumber
 
-from acroforge.detect.geometry import find_boxes, find_glyph_checkboxes, find_underlines
+from acroforge.detect.geometry import (
+    find_boxes,
+    find_glyph_checkboxes,
+    find_table_cells,
+    find_underlines,
+)
 from acroforge.detect.grouping import group_checkboxes
 from acroforge.detect.naming import name_for
 from acroforge.detect.scanned import is_scanned_page
@@ -54,8 +59,28 @@ def detect_manifest(pdf: str | bytes) -> FormManifest:
 
             words = _words_bottom_up(page)
 
+            # Track rounded positions of text fields to dedup table cells vs underlines.
+            text_positions: set[tuple[int, int]] = set()
+
             for i, cand in enumerate(find_underlines(page)):
                 name = name_for(cand.rect, words, fallback=f"text_{pno}_{i}")
+                text_positions.add((round(cand.rect[0]), round(cand.rect[1])))
+                fields.append(
+                    FieldSpec(
+                        type=FieldType.TEXT,
+                        page=pno,
+                        rect=cand.rect,
+                        name=name,
+                        confidence=cand.confidence,
+                    )
+                )
+
+            for ci, (cand, label) in enumerate(find_table_cells(page)):
+                pos = (round(cand.rect[0]), round(cand.rect[1]))
+                if pos in text_positions:
+                    continue  # already detected at ~this position (e.g. an underline)
+                text_positions.add(pos)
+                name = label or name_for(cand.rect, words, fallback=f"cell_{pno}_{ci}")
                 fields.append(
                     FieldSpec(
                         type=FieldType.TEXT,
