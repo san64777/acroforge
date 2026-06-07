@@ -2,6 +2,16 @@
 
 **Turn flat PDFs into real, fillable AcroForms. Permissive (Apache-2.0), deterministic, zero-copyleft.**
 
+[![CI](https://github.com/san64777/acroforge/actions/workflows/ci.yml/badge.svg)](https://github.com/san64777/acroforge/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![Checked with mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](https://mypy-lang.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+![Flat PDF turned into a fillable PDF by acroforge](assets/demo-before-after.png)
+
+> **Left:** a flat PDF — just printed lines and an empty box. **Right:** the same PDF after acroforge — real, fillable form fields, filled and rendered correctly. No Adobe, no cloud, no AGPL.
+
 ---
 
 ## What it does
