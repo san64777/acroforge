@@ -14,10 +14,20 @@ class Candidate:
 _MIN_UNDERLINE_W = 40.0
 _FIELD_HEIGHT = 16.0
 _MAX_RULE_RECT_H = 2.0
+_H_TOL = 1.5
+_V_TOL = 1.5
 
 
-def _is_horizontal(obj: dict[str, Any], tol: float = 1.5) -> bool:
-    return abs(float(obj["y1"]) - float(obj["y0"])) <= tol
+def _xy(obj: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    """(x0, x1, y0, y1) for a pdfplumber geom object, or None if unavailable.
+
+    Real-world PDFs contain geometry objects that don't carry the full
+    x0/x1/y0/y1 set; those are skipped rather than crashing detection.
+    """
+    try:
+        return float(obj["x0"]), float(obj["x1"]), float(obj["y0"]), float(obj["y1"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _rule_rects(page: Any) -> list[dict[str, Any]]:
@@ -28,16 +38,16 @@ def _rule_rects(page: Any) -> list[dict[str, Any]]:
     """
     out: list[dict[str, Any]] = []
     for r in page.rects:
-        if (float(r["y1"]) - float(r["y0"])) > _MAX_RULE_RECT_H:
+        c = _xy(r)
+        if c is None:
             continue
-        if (float(r["x1"]) - float(r["x0"])) < _MIN_UNDERLINE_W:
+        x0, x1, y0, y1 = c
+        if (y1 - y0) > _MAX_RULE_RECT_H:
             continue
-        out.append({"x0": r["x0"], "x1": r["x1"], "y0": r["y0"], "y1": r["y0"]})
+        if (x1 - x0) < _MIN_UNDERLINE_W:
+            continue
+        out.append({"x0": x0, "x1": x1, "y0": y0, "y1": y0})
     return out
-
-
-def _is_vertical(obj: dict[str, Any], tol: float = 1.5) -> bool:
-    return abs(float(obj["x1"]) - float(obj["x0"])) <= tol
 
 
 def _vertical_segments(page: Any) -> list[tuple[float, float, float]]:
@@ -45,21 +55,29 @@ def _vertical_segments(page: Any) -> list[tuple[float, float, float]]:
 
     Pulls verticals from: vertical lines, vertical edges, and BOTH side
     verticals (x0 and x1, each spanning y0..y1) of every page.rects entry.
+    Objects missing coordinates are skipped.
     """
     out: list[tuple[float, float, float]] = []
     for line in page.lines:
-        if _is_vertical(line):
-            x = float(line["x0"])
-            y0, y1 = float(line["y0"]), float(line["y1"])
-            out.append((x, min(y0, y1), max(y0, y1)))
+        c = _xy(line)
+        if c is None:
+            continue
+        x0, x1, y0, y1 = c
+        if abs(x1 - x0) <= _V_TOL:
+            out.append((x0, min(y0, y1), max(y0, y1)))
     for edge in page.edges:
-        if edge.get("orientation") == "v":
-            x = float(edge["x0"])
-            y0, y1 = float(edge["y0"]), float(edge["y1"])
-            out.append((x, min(y0, y1), max(y0, y1)))
+        if edge.get("orientation") != "v":
+            continue
+        c = _xy(edge)
+        if c is None:
+            continue
+        x0, x1, y0, y1 = c
+        out.append((x0, min(y0, y1), max(y0, y1)))
     for r in page.rects:
-        x0, x1 = float(r["x0"]), float(r["x1"])
-        y0, y1 = float(r["y0"]), float(r["y1"])
+        c = _xy(r)
+        if c is None:
+            continue
+        x0, x1, y0, y1 = c
         y_lo, y_hi = min(y0, y1), max(y0, y1)
         out.append((x0, y_lo, y_hi))
         out.append((x1, y_lo, y_hi))
@@ -90,10 +108,13 @@ def find_underlines(page: Any) -> list[Candidate]:
     verts = _vertical_segments(page)
     seen: set[tuple[int, int, int]] = set()
     for s in segs:
-        if not _is_horizontal(s):
+        c = _xy(s)
+        if c is None:
             continue
-        x0, x1 = float(s["x0"]), float(s["x1"])
-        y = float(s["y0"])
+        x0, x1, y0, y1 = c
+        if abs(y1 - y0) > _H_TOL:  # not horizontal
+            continue
+        y = y0
         if (x1 - x0) < _MIN_UNDERLINE_W:
             continue
         # A write-on underline has OPEN ends; a table/box edge is bounded by
@@ -116,7 +137,10 @@ def find_boxes(page: Any) -> list[Candidate]:
     out: list[Candidate] = []
     seen: set[tuple[int, int]] = set()
     for r in page.rects:
-        x0, y0, x1, y1 = float(r["x0"]), float(r["y0"]), float(r["x1"]), float(r["y1"])
+        c = _xy(r)
+        if c is None:
+            continue
+        x0, x1, y0, y1 = c
         w, h = x1 - x0, y1 - y0
         if not (_CB_MIN <= w <= _CB_MAX and _CB_MIN <= h <= _CB_MAX):
             continue
