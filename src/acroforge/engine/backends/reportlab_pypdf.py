@@ -222,7 +222,14 @@ class ReportlabPypdfWriter:
                     for kid in kids:
                         kid_obj = cast(DictionaryObject, kid.get_object())
                         kid_obj[NameObject("/P")] = base_page.indirect_reference
-                        annot_refs.append(kid.indirect_reference)
+                        # Guard: a kid widget must reach the page /Annots as a
+                        # real indirect ref. clone() normally registers it, but
+                        # if not, register it now so we never append None.
+                        kid_ref = kid_obj.indirect_reference
+                        if kid_ref is None:
+                            # pypdf <7: no public add_object; pin enforced in pyproject
+                            kid_ref = writer._add_object(kid_obj)
+                        annot_refs.append(kid_ref)
                 else:
                     # Widget-as-field (text/checkbox): one object is both the
                     # field and the page annotation.

@@ -46,6 +46,29 @@ def test_empty_fields_list_is_noop():
     assert len(r.pages) == 1  # still opens
 
 
+# FIX E — radio kid widgets must be registered as real indirect objects
+def test_radio_kid_widgets_are_indirect_objects():
+    fields = [
+        FieldSpec(type=FieldType.RADIO, page=0, rect=(100, 700, 114, 714),
+                  name="sex", export_value="M"),
+        FieldSpec(type=FieldType.RADIO, page=0, rect=(140, 700, 154, 714),
+                  name="sex", export_value="F"),
+    ]
+    out = af.build(_blank_pdf(), fields)
+    r = pypdf.PdfReader(io.BytesIO(out))
+    acro = r.trailer["/Root"]["/AcroForm"].get_object()
+    parent = acro["/Fields"][0].get_object()
+    kids = parent["/Kids"]
+    annots = r.pages[0]["/Annots"]
+    annot_ids = {(a.idnum, a.generation) for a in annots}
+    assert len(kids) == 2
+    for kid in kids:
+        assert kid is not None
+        assert kid.indirect_reference is not None
+        assert (kid.idnum, kid.generation) in annot_ids  # kid is on the page
+        assert kid.get_object()["/Subtype"] == "/Widget"
+
+
 # FIX D — use pypdf public root_object, not the private _root_object
 def test_engine_uses_public_root_object():
     # The public attribute exists on this pinned pypdf version.
