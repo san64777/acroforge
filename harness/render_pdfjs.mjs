@@ -31,6 +31,6 @@ const ctx = canvas.getContext("2d");
 await page.render({
   canvasContext: ctx,
   viewport,
-  annotationMode: AnnotationMode.ENABLE_FORMS,
+  annotationMode: AnnotationMode.ENABLE,
 }).promise;
 writeFileSync(output, canvas.toBuffer("image/png"));

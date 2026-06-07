@@ -12,3 +12,6 @@ dist/
 .mypy_cache/
 # node (render harness)
 harness/node_modules/
+# spike outputs (throwaway dev artifacts)
+spikes/*.pdf
+spikes/*.png
