@@ -164,6 +164,9 @@ class ReportlabPypdfWriter:
     """Writer backend: creates AcroForm fields via reportlab overlays + pypdf."""
 
     def create_fields(self, pdf: bytes, fields: list[FieldSpec]) -> bytes:
+        if not fields:
+            return pdf  # no-op: don't synthesize an empty /AcroForm
+
         writer = PdfWriter()
         writer.append(PdfReader(io.BytesIO(pdf)))
 

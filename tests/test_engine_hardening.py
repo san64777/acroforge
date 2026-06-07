@@ -33,3 +33,12 @@ def test_create_fields_out_of_range_page_raises():
     spec = FieldSpec(type=FieldType.TEXT, page=3, rect=(100, 700, 300, 718), name="oops")
     with pytest.raises(ValueError, match="oops"):
         af.build(_blank_pdf(), [spec])
+
+
+# FIX C — empty fields list is a no-op (no /AcroForm)
+def test_empty_fields_list_is_noop():
+    out = af.build(_blank_pdf(), [])
+    r = pypdf.PdfReader(io.BytesIO(out))
+    assert "/AcroForm" not in r.trailer["/Root"]
+    assert not (r.get_fields() or {})
+    assert len(r.pages) == 1  # still opens
