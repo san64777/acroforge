@@ -2,7 +2,7 @@
 
 __version__ = "0.0.0"
 
-from .api import build, fill, flatten
+from .api import build, detect, fill, flatten, make_fillable
 from .models import FieldType, FieldSpec, FormManifest, ScannedPDFError
 
 __all__ = [
@@ -11,6 +11,8 @@ __all__ = [
     "FormManifest",
     "ScannedPDFError",
     "build",
+    "detect",
     "fill",
     "flatten",
+    "make_fillable",
 ]

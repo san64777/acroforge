@@ -35,6 +35,18 @@ def _cmd_flatten(args: argparse.Namespace) -> None:
     Path(args.output).write_bytes(out)
 
 
+def _cmd_detect(args: argparse.Namespace) -> None:
+    pdf = Path(args.input).read_bytes()
+    manifest = api.detect(pdf)
+    print(manifest.model_dump_json(indent=2))
+
+
+def _cmd_make_fillable(args: argparse.Namespace) -> None:
+    pdf = Path(args.input).read_bytes()
+    out = api.make_fillable(pdf)
+    Path(args.output).write_bytes(out)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="acroforge",
@@ -58,6 +70,17 @@ def main(argv: Sequence[str] | None = None) -> None:
     p_flatten.add_argument("input", help="Source PDF path.")
     p_flatten.add_argument("output", help="Output PDF path.")
     p_flatten.set_defaults(func=_cmd_flatten)
+
+    p_detect = sub.add_parser("detect", help="Detect candidate fields and print JSON manifest.")
+    p_detect.add_argument("input", help="Source PDF path.")
+    p_detect.set_defaults(func=_cmd_detect)
+
+    p_make_fillable = sub.add_parser(
+        "make-fillable", help="Detect fields and produce a fillable PDF."
+    )
+    p_make_fillable.add_argument("input", help="Source PDF path.")
+    p_make_fillable.add_argument("output", help="Output PDF path.")
+    p_make_fillable.set_defaults(func=_cmd_make_fillable)
 
     args = parser.parse_args(list(argv) if argv is not None else None)
     args.func(args)
