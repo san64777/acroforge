@@ -13,15 +13,36 @@ class Candidate:
 
 _MIN_UNDERLINE_W = 40.0
 _FIELD_HEIGHT = 16.0
+_MAX_RULE_RECT_H = 2.0
 
 
 def _is_horizontal(obj: dict[str, Any], tol: float = 1.5) -> bool:
     return abs(float(obj["y1"]) - float(obj["y0"])) <= tol
 
 
+def _rule_rects(page: Any) -> list[dict[str, Any]]:
+    """Thin, wide rects that gov forms draw as rules instead of 1pt strokes.
+
+    A rect with height <= _MAX_RULE_RECT_H and width >= _MIN_UNDERLINE_W is
+    treated as an underline; its bottom edge (y0) is used as the line.
+    """
+    out: list[dict[str, Any]] = []
+    for r in page.rects:
+        if (float(r["y1"]) - float(r["y0"])) > _MAX_RULE_RECT_H:
+            continue
+        if (float(r["x1"]) - float(r["x0"])) < _MIN_UNDERLINE_W:
+            continue
+        out.append({"x0": r["x0"], "x1": r["x1"], "y0": r["y0"], "y1": r["y0"]})
+    return out
+
+
 def find_underlines(page: Any) -> list[Candidate]:
     out: list[Candidate] = []
-    segs = list(page.lines) + [e for e in page.edges if e.get("orientation") == "h"]
+    segs = (
+        list(page.lines)
+        + [e for e in page.edges if e.get("orientation") == "h"]
+        + _rule_rects(page)
+    )
     seen: set[tuple[int, int, int]] = set()
     for s in segs:
         if not _is_horizontal(s):

@@ -162,13 +162,62 @@ class FieldSpec(BaseModel):
 
 ---
 
+## Detection (best-effort)
+
+In addition to the deterministic engine, acroforge ships an **optional, best-effort**
+detector that *guesses* where fields belong on a flat vector PDF by reading its
+vector geometry (underline rules, small square boxes) and nearby text labels.
+
+```python
+import acroforge as af
+
+pdf = open("form.pdf", "rb").read()
+
+# Inspect candidate fields (a FormManifest); every field has confidence < 1.0
+manifest = af.detect(pdf)
+for f in manifest.fields:
+    print(f.type, f.name, f.rect, f.confidence)
+
+# Or go straight to a fillable PDF (detect() then build())
+fillable: bytes = af.make_fillable(pdf)
+```
+
+CLI:
+
+```bash
+# Print the detected manifest as JSON (review it!)
+acroforge detect form.pdf
+
+# Detect and write a fillable PDF in one step
+acroforge make-fillable form.pdf fillable.pdf
+```
+
+**Read this before relying on it:**
+
+- **Heuristic.** Detection guesses from vector shapes and text proximity. It will
+  miss fields and invent spurious ones.
+- **Vector-only.** It reads the PDF's vector content stream. **Scanned (image-only)
+  PDFs are refused** with `ScannedPDFError` — there is no OCR.
+- **Confidence-scored.** Every detected `FieldSpec` carries `confidence < 1.0` to
+  flag it as a guess. Explicitly authored specs use `confidence = 1.0`.
+- **Meant to be reviewed.** Treat the output of `detect()` / `make-fillable` as a
+  *draft* manifest to inspect and correct, not a finished form.
+- **No accuracy claims.** We make no promise about detection precision or recall on
+  any form. Quality varies wildly by document.
+- **No AI.** There are no models, no inference, no network calls — just deterministic
+  geometry heuristics over the PDF's own vectors.
+
 ## Scope and honest limits
 
-**v1 is the deterministic engine.** You supply field positions via `FieldSpec`s — acroforge injects, fills, and flattens them reliably. It does not guess where fields belong.
+**The reliable part is the deterministic `build` / `fill` / `flatten` engine.** You
+supply field positions via `FieldSpec`s — acroforge injects, fills, and flattens them
+reliably at exactly the coordinates you give it, on any PDF (vector or scanned).
 
-Automatic field *detection* on a flat PDF (finding the boxes, labelling them, grouping radio buttons) is a **separate, later module** not included in this release. There is no AI in this package.
+`detect()` / `make_fillable()` are the **best-effort** layer described above: use them
+to bootstrap a manifest, then review and hand off the corrected specs to the engine.
 
-The engine accepts any PDF as input (vector or scanned) — it adds fields at exactly the coordinates you give it. Automatically locating those coordinates from a scanned page is future work.
+There is no AI in this package, and no copyrighted form templates are bundled — bring
+your own PDFs.
 
 ---
 
