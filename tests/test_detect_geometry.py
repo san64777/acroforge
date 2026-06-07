@@ -27,3 +27,32 @@ def test_find_underlines_returns_text_candidates_above_each_line():
     assert xs == [100, 100]
     assert all(c.rect[3] > c.rect[1] for c in cands)
     assert all(0.0 < c.confidence <= 1.0 for c in cands)
+
+
+def _pdf_with_boxes() -> bytes:
+    import io
+
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(612, 792))
+    c.rect(100, 700, 12, 12)
+    c.rect(140, 700, 12, 12)
+    c.rect(100, 500, 300, 80)
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def test_find_boxes_returns_small_square_checkbox_candidates():
+    import io
+
+    import pdfplumber
+
+    from acroforge.detect.geometry import find_boxes
+
+    with pdfplumber.open(io.BytesIO(_pdf_with_boxes())) as pdf:
+        cands = find_boxes(pdf.pages[0])
+    assert len(cands) == 2
+    assert all(c.kind == "checkbox" for c in cands)
+    assert all(8 <= (c.rect[2] - c.rect[0]) <= 20 for c in cands)
