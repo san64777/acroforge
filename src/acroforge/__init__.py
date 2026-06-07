@@ -1,9 +1,14 @@
-"""acroforge — turn flat PDFs into fillable AcroForms."""
+"""acroforge - turn flat PDFs into fillable AcroForms."""
 
-__version__ = "0.0.0"
+from importlib.metadata import PackageNotFoundError, version
 
 from .api import build, detect, fill, flatten, make_fillable
-from .models import FieldType, FieldSpec, FormManifest, ScannedPDFError
+from .models import FieldSpec, FieldType, FormManifest, ScannedPDFError
+
+try:
+    __version__ = version("acroforge")
+except PackageNotFoundError:  # running from a source checkout that isn't installed
+    __version__ = "0.0.0"
 
 __all__ = [
     "FieldType",

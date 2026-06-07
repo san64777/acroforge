@@ -1,18 +1,18 @@
-# GATE A — Engine Bake-off Results
+# GATE A - Engine Bake-off Results
 
 ## VERDICT
 
-**WINNER: reportlab + pypdf** — strictly permissive (reportlab BSD + pypdf BSD-3-Clause), no copyleft anywhere in the dep tree; correctly registers and renders the field on the real f1040 (XFA + duplicate field names).
+**WINNER: reportlab + pypdf** - strictly permissive (reportlab BSD + pypdf BSD-3-Clause), no copyleft anywhere in the dep tree; correctly registers and renders the field on the real f1040 (XFA + duplicate field names).
 
-**Fallback: pikepdf** — MPL-2.0 (weak/file-level copyleft); structurally correct but not "strictly permissive".
+**Fallback: pikepdf** - MPL-2.0 (weak/file-level copyleft); structurally correct but not "strictly permissive".
 
-**Rejected: PyPDFForm** — two independent failures: (1) orphaned fields not registered in `/AcroForm /Fields`; (2) broken text `/AP` stream. Additionally, PyPDFForm 5.2.0 is transitively MPL-2.0 (pikepdf is a required runtime dep), so it is no longer strictly permissive.
+**Rejected: PyPDFForm** - two independent failures: (1) orphaned fields not registered in `/AcroForm /Fields`; (2) broken text `/AP` stream. Additionally, PyPDFForm 5.2.0 is transitively MPL-2.0 (pikepdf is a required runtime dep), so it is no longer strictly permissive.
 
 ---
 
 **Task:** add ONE text field (`af_probe_text` = `ACROFORGE`) and ONE checkbox
 (`af_probe_check`, checked) near the top of page 1 of `tests/fixtures/f1040.pdf`
-— a form with **duplicate annotation-level `/T` field names** (verified: 6 dup
+- a form with **duplicate annotation-level `/T` field names** (verified: 6 dup
 names incl. `Dependent1[0]` x3, `c1_8[0]` x2) **and an XFA template**.
 
 Fields placed in clear whitespace in the strip above the "1040" title:
@@ -22,7 +22,7 @@ text at `[200, 772, 360, 788]`, checkbox 14pt at `[380, 772, 394, 786]`
 > Note for the judge: the harness `render_pdfjs.mjs` uses
 > `AnnotationMode.ENABLE_FORMS`. In this **headless `@napi-rs/canvas`** setup,
 > pdf.js does **not paint interactive widget values onto the canvas** under
-> ENABLE_FORMS (it expects an HTML annotation layer) — so for **all** candidates
+> ENABLE_FORMS (it expects an HTML annotation layer) - so for **all** candidates
 > the `*_pdfjs.png` top strip is blank even when the field is 100% correct.
 > pdf.js *does* parse the fields with the right names/types/values. Rendering the
 > same files under `AnnotationMode.ENABLE` (honour embedded `/AP`) is the true
@@ -32,9 +32,9 @@ text at `[200, 772, 360, 788]`, checkbox 14pt at `[380, 772, 394, 786]`
 
 | candidate | license posture | probe ran | structural check (field registered + value) | both PNGs produced | pdfium render | pdf.js (ENABLE / `/AP`) | errors / notes |
 |---|---|---|---|---|---|---|---|
-| **PyPDFForm** | MIT itself, but **NOT strictly permissive in 5.2.0**: its runtime deps now include **pikepdf (MPL-2.0)** + cryptography (Apache/BSD), fonttools (MIT), pillow (MIT-CMU), pypdf (BSD-3), reportlab (BSD). The old "on pypdf+reportlab only" premise is outdated — MPL-2.0 is now in the tree. | y | **FAIL** — `get_fields()` finds neither field. Widgets are added to page `/Annots` (with `/T`,`/FT`,`/V`,`/AS`) but **never registered in `/AcroForm /Fields`** (top-level still only `topmostSubform[0]`). | y | text + checkbox both visible (pdfium walks page annots, regenerates from `/V`) | **checkbox visible, text NOT** — its text-field `/AP` is a bogus `TextStringObject`, not a real appearance stream; and fields aren't in `/Fields`. | Two distinct failures on this XFA/dup-name form: (1) orphaned fields not in `/Fields`; (2) broken text `/AP`. Root cause: `_apply_widgets_to_pages` only appends to `page[/Annots]`; XFA left intact. |
-| **reportlab + pypdf (DIY)** | **strictly permissive** — reportlab BSD + pypdf BSD-3-Clause. No copyleft anywhere. | y | **PASS** — text registered, `/V = ACROFORGE`; checkbox registered, `/V = /Yes`. | y | text (blue bg + border) + checked checkbox both visible | **both visible** — reportlab emits real `/AP` streams (text `(ACROFORGE) Tj` + checkbox `/N {/Off,/Yes}`). | Probe registers widgets in `/AcroForm /Fields` explicitly (clone annots into writer, append refs to `/Fields`), drops XFA, leaves NeedAppearances off so `/AP` is honoured. Robust against the dup-name base because we don't use pypdf's field-tree merge. |
-| **pikepdf (low-level)** | **MPL-2.0** — weak/file-level copyleft. Permissive enough for a fallback (only requires sharing changes to MPL files themselves), but **not "strictly permissive"** like MIT/BSD. | y | **PASS** — text registered, `/V = ACROFORGE`; checkbox registered, `/V = /Yes`. | y | text + checked checkbox both visible | **both visible** — text `/AP` generated; checkbox `/AP {/Off,/Yes}` built by hand. | Used core `pdf.acroform.add_and_rename_fields([...])` (handles dup names; `pikepdf.form.Form` would have raised). Gotchas found: `acroform.exists` is a **property** not a method; `generate_appearances_if_needed()` only fires when `/NeedAppearances` is set AND only handles text/choice fields — it does **NOT** synthesize **button** appearances, so the checkbox `/AP` had to be drawn manually (ZapfDingbats "4"). |
+| **PyPDFForm** | MIT itself, but **NOT strictly permissive in 5.2.0**: its runtime deps now include **pikepdf (MPL-2.0)** + cryptography (Apache/BSD), fonttools (MIT), pillow (MIT-CMU), pypdf (BSD-3), reportlab (BSD). The old "on pypdf+reportlab only" premise is outdated - MPL-2.0 is now in the tree. | y | **FAIL** - `get_fields()` finds neither field. Widgets are added to page `/Annots` (with `/T`,`/FT`,`/V`,`/AS`) but **never registered in `/AcroForm /Fields`** (top-level still only `topmostSubform[0]`). | y | text + checkbox both visible (pdfium walks page annots, regenerates from `/V`) | **checkbox visible, text NOT** - its text-field `/AP` is a bogus `TextStringObject`, not a real appearance stream; and fields aren't in `/Fields`. | Two distinct failures on this XFA/dup-name form: (1) orphaned fields not in `/Fields`; (2) broken text `/AP`. Root cause: `_apply_widgets_to_pages` only appends to `page[/Annots]`; XFA left intact. |
+| **reportlab + pypdf (DIY)** | **strictly permissive** - reportlab BSD + pypdf BSD-3-Clause. No copyleft anywhere. | y | **PASS** - text registered, `/V = ACROFORGE`; checkbox registered, `/V = /Yes`. | y | text (blue bg + border) + checked checkbox both visible | **both visible** - reportlab emits real `/AP` streams (text `(ACROFORGE) Tj` + checkbox `/N {/Off,/Yes}`). | Probe registers widgets in `/AcroForm /Fields` explicitly (clone annots into writer, append refs to `/Fields`), drops XFA, leaves NeedAppearances off so `/AP` is honoured. Robust against the dup-name base because we don't use pypdf's field-tree merge. |
+| **pikepdf (low-level)** | **MPL-2.0** - weak/file-level copyleft. Permissive enough for a fallback (only requires sharing changes to MPL files themselves), but **not "strictly permissive"** like MIT/BSD. | y | **PASS** - text registered, `/V = ACROFORGE`; checkbox registered, `/V = /Yes`. | y | text + checked checkbox both visible | **both visible** - text `/AP` generated; checkbox `/AP {/Off,/Yes}` built by hand. | Used core `pdf.acroform.add_and_rename_fields([...])` (handles dup names; `pikepdf.form.Form` would have raised). Gotchas found: `acroform.exists` is a **property** not a method; `generate_appearances_if_needed()` only fires when `/NeedAppearances` is set AND only handles text/choice fields - it does **NOT** synthesize **button** appearances, so the checkbox `/AP` had to be drawn manually (ZapfDingbats "4"). |
 
 ## License summary (verified via `uv run pip-licenses`)
 
@@ -53,9 +53,9 @@ pillow      12.2.0  MIT-CMU                      (PyPDFForm dep)
 The single copyleft entry in the PyPDFForm tree is **pikepdf (MPL-2.0)**.
 
 **Strictly-permissive ranking by actual dep tree:**
-1. **reportlab + pypdf** — BSD + BSD-3 only. Strictly permissive. ✅
-2. **PyPDFForm** — MIT package, but transitively MPL-2.0 (pikepdf) in 5.2.0. ⚠️
-3. **pikepdf** — MPL-2.0. ⚠️ (same copyleft tier as #2's transitive dep)
+1. **reportlab + pypdf** - BSD + BSD-3 only. Strictly permissive. ✅
+2. **PyPDFForm** - MIT package, but transitively MPL-2.0 (pikepdf) in 5.2.0. ⚠️
+3. **pikepdf** - MPL-2.0. ⚠️ (same copyleft tier as #2's transitive dep)
 
 ## API notes (researched, not assumed)
 
@@ -83,11 +83,11 @@ The single copyleft entry in the PyPDFForm tree is **pikepdf (MPL-2.0)**.
 
 ---
 
-# GATE C — Source-Agnostic Stamp (Scanned PDF)
+# GATE C - Source-Agnostic Stamp (Scanned PDF)
 
 ## VERDICT: PASS
 
-**Goal:** prove the reportlab+pypdf engine is source-agnostic — it can stamp a
+**Goal:** prove the reportlab+pypdf engine is source-agnostic - it can stamp a
 filled, registered AcroForm field onto a scanned/image-only PDF page, AND that
 `is_scanned_pdf` correctly flags such a file so auto-detection would refuse it.
 
@@ -95,24 +95,24 @@ filled, registered AcroForm field onto a scanned/image-only PDF page, AND that
 
 - **Input fixture:** `tests/fixtures/scanned_sample.pdf`
   - Page size: 587.52 x 760.32 pt
-  - Content: chars=0, images=1 — confirmed image-only scan
+  - Content: chars=0, images=1 - confirmed image-only scan
 - **Field stamped:** `af_on_scan` = `STAMPED-ON-SCAN` (text, 11pt)
-  - Positioned at rect [60, 730, 340, 748] — top strip of the scanned page
+  - Positioned at rect [60, 730, 340, 748] - top strip of the scanned page
 - **Output:** `spikes/out_scanned_stamped.pdf`
 
 ## Results
 
 | check | result |
 |---|---|
-| `is_scanned_pdf('tests/fixtures/scanned_sample.pdf')` | **True** — auto-detect correctly guards against this input |
+| `is_scanned_pdf('tests/fixtures/scanned_sample.pdf')` | **True** - auto-detect correctly guards against this input |
 | stamped field registered in `/AcroForm /Fields` | **True** |
 | field value read back via `pypdf.get_fields()` | **`STAMPED-ON-SCAN`** |
-| pdfium stamped-vs-original pixel mismatch ratio | **0.0116** (non-zero — new ink visible) |
-| pdf.js stamped-vs-original pixel mismatch ratio | **0.0116** (non-zero — new ink visible) |
+| pdfium stamped-vs-original pixel mismatch ratio | **0.0116** (non-zero - new ink visible) |
+| pdf.js stamped-vs-original pixel mismatch ratio | **0.0116** (non-zero - new ink visible) |
 
 ## Interpretation
 
-- `is_scanned_pdf` returns `True` for the input — the auto-detect layer would
+- `is_scanned_pdf` returns `True` for the input - the auto-detect layer would
   refuse to treat this as a native-text PDF, which is the correct safety gate.
 - The engine nonetheless *can* stamp the field (the engine itself is
   source-agnostic; the guard is a policy decision above it).

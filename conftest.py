@@ -1,1 +1,1 @@
-# Root conftest.py — adds project root to sys.path so `from harness...` works.
+# Root conftest.py - adds project root to sys.path so `from harness...` works.

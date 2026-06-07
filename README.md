@@ -10,13 +10,13 @@
 
 ![Flat PDF turned into a fillable PDF by acroforge](https://raw.githubusercontent.com/san64777/acroforge/main/assets/demo-before-after.png)
 
-> **Left:** a flat PDF — just printed lines and an empty box. **Right:** the same PDF after acroforge — real, fillable form fields, filled and rendered correctly. No Adobe, no cloud, no AGPL.
+> **Left:** a flat PDF - just printed lines and an empty box. **Right:** the same PDF after acroforge - real, fillable form fields, filled and rendered correctly. No Adobe, no cloud, no AGPL.
 
 ---
 
 ## What it does
 
-acroforge takes any PDF — vector or scanned — and injects real AcroForm fields at positions you specify. The result is a standards-compliant fillable PDF that renders correctly in Chrome's pdfium and Firefox's pdf.js.
+acroforge takes any PDF - vector or scanned - and injects real AcroForm fields at positions you specify. The result is a standards-compliant fillable PDF that renders correctly in Chrome's pdfium and Firefox's pdf.js.
 
 Three operations:
 
@@ -32,18 +32,16 @@ All three functions accept and return plain `bytes`, making them easy to compose
 
 ## Install
 
-**Not yet published to PyPI.** Install from source:
-
-```bash
-pip install -e .
-# or, with uv:
-uv pip install -e .
-```
-
-When published:
-
 ```bash
 pip install acroforge
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/san64777/acroforge
+cd acroforge
+pip install -e .   # or: uv pip install -e .
 ```
 
 ---
@@ -87,7 +85,7 @@ fillable: bytes = af.build(flat_pdf, fields)
 # --- Step 3: fill values ---
 filled: bytes = af.fill(fillable, {"full_name": "Jane Doe", "agree": True})
 
-# --- Step 4: flatten (optional — locks the form) ---
+# --- Step 4: flatten (optional - locks the form) ---
 final: bytes = af.flatten(filled)
 
 # Write to disk
@@ -154,7 +152,7 @@ acroforge flatten filled.pdf final.pdf
 | Multi-cell comb | `FieldType.COMB` | `maxlen` sets the number of cells (e.g. SSN = 9) |
 | Checkbox | `FieldType.CHECKBOX` | `export_value` is the on-state value (default `"Yes"`) |
 | Radio button | `FieldType.RADIO` | One `FieldSpec` per button; share `name`, set `export_value` per button |
-| Signature | `FieldType.SIGNATURE` | Placeholder widget — renders a blank sig box |
+| Signature | `FieldType.SIGNATURE` | Placeholder widget - renders a blank sig box |
 
 ### `FieldSpec` reference
 
@@ -178,11 +176,11 @@ In addition to the deterministic engine, acroforge ships an **optional, best-eff
 detector that *guesses* where fields belong on a flat vector PDF by reading its
 vector geometry and nearby text labels. It handles both common form archetypes:
 
-- **Underline forms** — write-on rules become text fields.
-- **Table/grid forms** — bordered table cells become text fields (label-aware: the
+- **Underline forms** - write-on rules become text fields.
+- **Table/grid forms** - bordered table cells become text fields (label-aware: the
   field is placed in the writable area below the label, multi-column cells are split,
   and section-header rows are skipped).
-- **Checkboxes** — both vector squares and font glyphs (☐ / ☑ / ☒).
+- **Checkboxes** - both vector squares and font glyphs (☐ / ☑ / ☒).
 
 ```python
 import acroforge as af
@@ -213,26 +211,26 @@ acroforge make-fillable form.pdf fillable.pdf
 - **Heuristic.** Detection guesses from vector shapes and text proximity. It will
   miss fields and invent spurious ones.
 - **Vector-only.** It reads the PDF's vector content stream. **Scanned (image-only)
-  PDFs are refused** with `ScannedPDFError` — there is no OCR.
+  PDFs are refused** with `ScannedPDFError` - there is no OCR.
 - **Confidence-scored.** Every detected `FieldSpec` carries `confidence < 1.0` to
   flag it as a guess. Explicitly authored specs use `confidence = 1.0`.
 - **Meant to be reviewed.** Treat the output of `detect()` / `make-fillable` as a
   *draft* manifest to inspect and correct, not a finished form.
 - **No accuracy claims.** We make no promise about detection precision or recall on
   any form. Quality varies wildly by document.
-- **No AI.** There are no models, no inference, no network calls — just deterministic
+- **No AI.** There are no models, no inference, no network calls - just deterministic
   geometry heuristics over the PDF's own vectors.
 
 ## Scope and honest limits
 
 **The reliable part is the deterministic `build` / `fill` / `flatten` engine.** You
-supply field positions via `FieldSpec`s — acroforge injects, fills, and flattens them
+supply field positions via `FieldSpec`s - acroforge injects, fills, and flattens them
 reliably at exactly the coordinates you give it, on any PDF (vector or scanned).
 
 `detect()` / `make_fillable()` are the **best-effort** layer described above: use them
 to bootstrap a manifest, then review and hand off the corrected specs to the engine.
 
-There is no AI in this package, and no copyrighted form templates are bundled — bring
+There is no AI in this package, and no copyrighted form templates are bundled - bring
 your own PDFs.
 
 ---
@@ -251,8 +249,8 @@ Runtime dependencies are strictly permissive:
 
 Optional extras:
 
-- `[fallback]` — adds `pikepdf` (MPL-2.0) as a fallback PDF writer; **not required** for the default engine path.
-- `[harness]` — adds `pypdfium2` + `Pillow` for cross-viewer visual regression tests.
+- `[fallback]` - adds `pikepdf` (MPL-2.0) as a fallback PDF writer; **not required** for the default engine path.
+- `[harness]` - adds `pypdfium2` + `Pillow` for cross-viewer visual regression tests.
 
 No GPL, AGPL, LGPL, or SSPL in the runtime tree. CI enforces this on every push via `pip-licenses --fail-on='GPL;AGPL;LGPL;SSPL'`.
 

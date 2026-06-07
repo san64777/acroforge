@@ -19,7 +19,7 @@ Researched API (pikepdf 10.7.3):
     need_appearance=True)`, `.generate_appearance(annot)`.
   - We pass raw widget dicts (each is its own field: /T,/FT,/Ff,/Rect,/V,...) as
     a `pikepdf.Array` / list to `add_and_rename_fields`, which appends them to
-    /AcroForm /Fields (renaming on collision) — exactly what a duplicate-name
+    /AcroForm /Fields (renaming on collision) - exactly what a duplicate-name
     base needs.
 
 Coords (page 612x792, bottom-left origin): text at x0=200,y0=772,x1=360,y1=788;

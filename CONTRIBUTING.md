@@ -1,18 +1,18 @@
 # Contributing to acroforge
 
 Thanks for your interest! acroforge turns flat PDFs into real, fillable AcroForms.
-Contributions are welcome — please read this first so your PR goes smoothly.
+Contributions are welcome - please read this first so your PR goes smoothly.
 
 ## Project philosophy (please respect it)
 
 - **The engine is bulletproof; detection is best-effort.** `build` / `fill` / `flatten`
   must be deterministic and correct for every valid input. The `detect` layer is
-  allowed to be heuristic and confidence-scored — but it must never make the engine
+  allowed to be heuristic and confidence-scored - but it must never make the engine
   unreliable.
 - **Zero copyleft.** The runtime dependency tree must stay permissive (BSD / MIT /
-  Apache). **No GPL / AGPL / LGPL / SSPL** dependencies — CI enforces this and your PR
+  Apache). **No GPL / AGPL / LGPL / SSPL** dependencies - CI enforces this and your PR
   will fail the license gate if one sneaks in (even transitively).
-- **No AI in the core.** Detection is pure deterministic geometry — no models, no
+- **No AI in the core.** Detection is pure deterministic geometry - no models, no
   network calls.
 - **Stay narrow.** acroforge does one thing. New features need a clear case.
 
@@ -31,7 +31,7 @@ uv pip install -e ".[dev,harness]"
 
 ## Before you open a PR
 
-Run the full quality bar locally — all of it must be green:
+Run the full quality bar locally - all of it must be green:
 
 ```bash
 uv run ruff check src tests      # lint
@@ -40,7 +40,7 @@ uv run pytest                    # tests
 uv run pip-licenses --fail-on='GPL;AGPL;LGPL;SSPL' --partial-match   # license gate
 ```
 
-- **Add tests** for any behavior change (we use TDD — write the failing test first).
+- **Add tests** for any behavior change (we use TDD - write the failing test first).
 - **Keep `mypy --strict` clean.**
 - **Conventional commit messages** (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`).
 

@@ -278,7 +278,7 @@ def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
     bottom-up PDF points (inset 1pt) via `page.height`.
 
     Returns `(Candidate, label_slug)` pairs; the slug is derived from the cell's
-    text (may be "" — callers supply a fallback). Cells that are too small/tall,
+    text (may be "" - callers supply a fallback). Cells that are too small/tall,
     hold a checkbox glyph, or contain paragraph-length text are skipped.
 
     Three precision refinements run per passing cell (each may add 0..N fields):
@@ -317,11 +317,11 @@ def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
             except Exception:
                 cell_words = []
 
-            # Refinement A — skip section-header cells.
+            # Refinement A - skip section-header cells.
             if _is_header_cell(x0, x1, cell_words, page_width, body_size):
                 continue
 
-            # Refinement B — find the writable area below the label line.
+            # Refinement B - find the writable area below the label line.
             top_line = _top_line_words(cell_words)
             if top_line:
                 label_bottom = max(float(w_["bottom"]) for w_ in top_line) + 1.0
@@ -331,7 +331,7 @@ def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
                 label_bottom = top  # empty input cell: use the whole cell
             write_top = label_bottom  # top-down top edge of the writable region
 
-            # Refinement C — split multi-label cells by the top line's clusters.
+            # Refinement C - split multi-label cells by the top line's clusters.
             clusters = _label_clusters(top_line)
             if len(clusters) > 1:
                 spans: list[tuple[float, float, str]] = []

@@ -103,7 +103,7 @@ def _split_pdf() -> bytes:
     c.line(100, 620, 100, 612)
     c.line(520, 620, 520, 612)
     c.setFont("Helvetica", 9)
-    # Multi-word label groups: small intra-group gaps, large inter-group gaps —
+    # Multi-word label groups: small intra-group gaps, large inter-group gaps -
     # the typical credentialing-form "LAST NAME   FIRST NAME   MIDDLE INITIAL" row.
     c.drawString(110, 650, "LAST NAME")
     c.drawString(320, 650, "FIRST NAME")

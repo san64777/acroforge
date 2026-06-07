@@ -1,6 +1,6 @@
 """GATE C probe: stamp a filled AcroForm text field onto a scanned/image-only PDF.
 
-Demonstrates that the reportlab+pypdf engine is source-agnostic — it can add a
+Demonstrates that the reportlab+pypdf engine is source-agnostic - it can add a
 properly-registered, viewer-renderable form field to a page that contains no
 vector text whatsoever (chars==0, images==1, is_scanned_pdf==True).
 
@@ -45,7 +45,7 @@ def _build_overlay() -> bytes:
     form = c.acroForm
 
     # Place in top strip: x=60, y=730 (bottom-left of field),
-    # width=280, height=18 — well within the 587.52-wide page and clearly
+    # width=280, height=18 - well within the 587.52-wide page and clearly
     # visible in the upper region of the scanned image.
     form.textfield(
         name=FIELD_NAME,

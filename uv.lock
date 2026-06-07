@@ -8,7 +8,7 @@ resolution-markers = [
 
 [[package]]
 name = "acroforge"
-version = "0.0.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "pdfplumber" },

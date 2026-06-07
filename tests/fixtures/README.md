@@ -7,9 +7,9 @@ All files listed here are **public domain (US government work)** and safe to com
 
 | File | Source URL | License / Notes |
 |------|-----------|-----------------|
-| `fw9.pdf` | https://www.irs.gov/pub/irs-pdf/fw9.pdf | Public domain (US government work) — IRS Form W-9, Request for Taxpayer Identification Number |
-| `f1040.pdf` | https://www.irs.gov/pub/irs-pdf/f1040.pdf | Public domain (US government work) — IRS Form 1040, US Individual Income Tax Return. Contains duplicate annotation-level field names (`/T`), used to test Gate A (duplicate-name handling). |
-| `scanned_sample.pdf` | Derived from `fw9.pdf` | Public domain (US government work, derived) — First page of fw9.pdf rasterized to PNG at 2x scale via pypdfium2, then re-saved as an image-only PDF via Pillow. Contains zero vector text/lines/rects; used to test `is_scanned` detection (Gate C). |
+| `fw9.pdf` | https://www.irs.gov/pub/irs-pdf/fw9.pdf | Public domain (US government work) - IRS Form W-9, Request for Taxpayer Identification Number |
+| `f1040.pdf` | https://www.irs.gov/pub/irs-pdf/f1040.pdf | Public domain (US government work) - IRS Form 1040, US Individual Income Tax Return. Contains duplicate annotation-level field names (`/T`), used to test Gate A (duplicate-name handling). |
+| `scanned_sample.pdf` | Derived from `fw9.pdf` | Public domain (US government work, derived) - First page of fw9.pdf rasterized to PNG at 2x scale via pypdfium2, then re-saved as an image-only PDF via Pillow. Contains zero vector text/lines/rects; used to test `is_scanned` detection (Gate C). |
 
 ## Notes
 

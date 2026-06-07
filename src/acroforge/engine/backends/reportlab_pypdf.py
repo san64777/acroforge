@@ -1,8 +1,8 @@
 """reportlab + pypdf field-creation backend (Gate A winner, BSD + BSD).
 
 Productionizes the proven spike technique
-(``spikes/gate_a_reportlab_pypdf.py``): reportlab draws each widget — with a
-real ``/AP`` appearance stream — onto a same-size overlay page, then pypdf
+(``spikes/gate_a_reportlab_pypdf.py``): reportlab draws each widget - with a
+real ``/AP`` appearance stream - onto a same-size overlay page, then pypdf
 clones those widget annotations into the target, repoints ``/P`` at the right
 page, and registers the refs in ``/AcroForm /Fields`` so spec-correct viewers
 (e.g. pdf.js, which enumerates ``/Fields``) render them. ``/NeedAppearances``
@@ -35,7 +35,7 @@ from acroforge.models import FieldSpec, FieldType
 def _draw_widget(form: object, spec: FieldSpec) -> None:
     """Draw one widget onto reportlab's AcroForm overlay.
 
-    ``form`` is a ``reportlab.pdfbase.acroform.AcroForm`` (untyped — reportlab
+    ``form`` is a ``reportlab.pdfbase.acroform.AcroForm`` (untyped - reportlab
     ships no stubs). Coordinate mapping: rect ``(x0, y0, x1, y1)`` →
     reportlab ``x=x0, y=y0, width=x1-x0, height=y1-y0``; checkbox uses the
     square ``size=min(w, h)`` anchored at the bottom-left.
@@ -121,7 +121,7 @@ def _build_signature_widget(
     reportlab has no signature helper, so the widget is assembled directly from
     pypdf objects: a ``/FT /Sig`` widget annotation with an empty bordered-box
     ``/AP`` ``/N`` appearance stream so it renders as a visible placeholder.
-    This is a placeholder field only — not a digital-signature workflow.
+    This is a placeholder field only - not a digital-signature workflow.
     """
     x0, y0, x1, y1 = spec.rect
     w, h = x1 - x0, y1 - y0
@@ -242,7 +242,7 @@ class ReportlabPypdfWriter:
                 kids = cloned.get("/Kids")
                 if kids:
                     # Group field (e.g. radio): the page widgets are its kids;
-                    # repoint each kid's /P and add the kids — not the parent —
+                    # repoint each kid's /P and add the kids - not the parent -
                     # to the page /Annots; register the parent in /Fields.
                     for kid in kids:
                         kid_obj = cast(DictionaryObject, kid.get_object())

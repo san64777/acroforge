@@ -101,7 +101,7 @@ def run(src: str = "tests/fixtures/f1040.pdf", out: str = "spikes/out_reportlab_
     if not overlay_annots:
         raise RuntimeError("reportlab overlay produced no widget annotations")
 
-    # Composite the overlay's *visual* content under nothing special — we just
+    # Composite the overlay's *visual* content under nothing special - we just
     # need the appearance streams, which travel with the annotation /AP, so a
     # content merge isn't strictly required. But merge_page also draws any page
     # content; reportlab put none besides the widgets, so skip merge_page and

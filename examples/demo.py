@@ -1,4 +1,4 @@
-"""acroforge demo — run this to SEE it work and learn the API.
+"""acroforge demo - run this to SEE it work and learn the API.
 
     uv run python examples/demo.py
 
@@ -22,7 +22,7 @@ OUT.mkdir(exist_ok=True)
 
 
 def make_flat_form() -> bytes:
-    """Draw a simple FLAT form (just labels + lines + a box — NO real fields)."""
+    """Draw a simple FLAT form (just labels + lines + a box - NO real fields)."""
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(612, 792))
     c.setFont("Helvetica-Bold", 16)
@@ -43,9 +43,9 @@ def demo_a_engine() -> None:
     print("\n=== Demo A: THE ENGINE (you supply field positions) ===")
     flat = make_flat_form()
     (OUT / "A1_flat_form.pdf").write_bytes(flat)
-    print("  wrote A1_flat_form.pdf      (a flat form — you can't type in it)")
+    print("  wrote A1_flat_form.pdf      (a flat form - you can't type in it)")
 
-    # 1) BUILD — add real, named, fillable fields at the positions above
+    # 1) BUILD - add real, named, fillable fields at the positions above
     fields = [
         af.FieldSpec(type=af.FieldType.TEXT, page=0, rect=(150, 698, 460, 714), name="full_name"),
         af.FieldSpec(type=af.FieldType.TEXT, page=0, rect=(150, 668, 460, 684), name="email"),
@@ -53,24 +53,24 @@ def demo_a_engine() -> None:
     ]
     built = af.build(flat, fields)
     (OUT / "A2_fillable.pdf").write_bytes(built)
-    print("  wrote A2_fillable.pdf       (now it has real fields — open it and type!)")
+    print("  wrote A2_fillable.pdf       (now it has real fields - open it and type!)")
 
-    # 2) FILL — set values by name
+    # 2) FILL - set values by name
     filled = af.fill(built, {"full_name": "Asha Rao", "email": "asha@example.com", "agree": True})
     (OUT / "A3_filled.pdf").write_bytes(filled)
     print("  wrote A3_filled.pdf         (filled in programmatically)")
 
-    # 3) FLATTEN — bake the values in permanently (no longer editable)
+    # 3) FLATTEN - bake the values in permanently (no longer editable)
     flat_final = af.flatten(filled)
     (OUT / "A4_flattened.pdf").write_bytes(flat_final)
-    print("  wrote A4_flattened.pdf      (values baked in — final, non-editable)")
+    print("  wrote A4_flattened.pdf      (values baked in - final, non-editable)")
 
 
 def demo_b_detection() -> None:
     print("\n=== Demo B: DETECTION (best-effort, auto-find fields) ===")
     w9 = Path("tests/fixtures/fw9.pdf")
     if not w9.exists():
-        print("  (skipped — tests/fixtures/fw9.pdf not found; run from the repo root)")
+        print("  (skipped - tests/fixtures/fw9.pdf not found; run from the repo root)")
         return
     data = w9.read_bytes()
 
@@ -81,7 +81,7 @@ def demo_b_detection() -> None:
 
     auto = af.make_fillable(data)           # detect() then build()
     (OUT / "B_w9_autofillable.pdf").write_bytes(auto)
-    print("  wrote B_w9_autofillable.pdf (the flat W-9, now auto-fillable — imperfect, review it)")
+    print("  wrote B_w9_autofillable.pdf (the flat W-9, now auto-fillable - imperfect, review it)")
 
 
 if __name__ == "__main__":

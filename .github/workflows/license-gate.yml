@@ -8,7 +8,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv python install 3.11
       - run: uv venv
-      # Install ONLY the default runtime tree (+ pip-licenses) — this is what ships.
+      # Install ONLY the default runtime tree (+ pip-licenses) - this is what ships.
       # No [fallback]/[harness] extras, so the gate verifies the real install is
       # zero-copyleft. Fails if any GPL/AGPL/LGPL/SSPL dep appears.
       - run: uv pip install -e ".[dev]"

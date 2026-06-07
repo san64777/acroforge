@@ -50,7 +50,7 @@ def _offset_origin_pdf() -> bytes:
     return out.getvalue()
 
 
-# FIX A — fill() must raise on unknown field names
+# FIX A - fill() must raise on unknown field names
 def test_fill_unknown_field_raises():
     built = af.build(
         _blank_pdf(),
@@ -70,14 +70,14 @@ def test_fill_known_field_still_works():
     assert f["nm"]["/V"] == "ok"
 
 
-# FIX B — create_fields rejects out-of-range page index
+# FIX B - create_fields rejects out-of-range page index
 def test_create_fields_out_of_range_page_raises():
     spec = FieldSpec(type=FieldType.TEXT, page=3, rect=(100, 700, 300, 718), name="oops")
     with pytest.raises(ValueError, match="oops"):
         af.build(_blank_pdf(), [spec])
 
 
-# FIX C — empty fields list is a no-op (no /AcroForm)
+# FIX C - empty fields list is a no-op (no /AcroForm)
 def test_empty_fields_list_is_noop():
     out = af.build(_blank_pdf(), [])
     r = pypdf.PdfReader(io.BytesIO(out))
@@ -86,7 +86,7 @@ def test_empty_fields_list_is_noop():
     assert len(r.pages) == 1  # still opens
 
 
-# FIX E — radio kid widgets must be registered as real indirect objects
+# FIX E - radio kid widgets must be registered as real indirect objects
 def test_radio_kid_widgets_are_indirect_objects():
     fields = [
         FieldSpec(type=FieldType.RADIO, page=0, rect=(100, 700, 114, 714),
@@ -109,7 +109,7 @@ def test_radio_kid_widgets_are_indirect_objects():
         assert kid.get_object()["/Subtype"] == "/Widget"
 
 
-# FIX F — non-zero MediaBox origin: field lands at the correct visual location
+# FIX F - non-zero MediaBox origin: field lands at the correct visual location
 def test_field_on_offset_origin_mediabox_renders_in_place(tmp_path):
     from harness.diff import png_mismatch_ratio
     from harness.render_pdfium import render_pdfium
@@ -155,7 +155,7 @@ def test_field_on_offset_origin_mediabox_renders_in_place(tmp_path):
     assert top_px - 2 <= by0 and by1 <= bot_px + 2
 
 
-# FIX D — use pypdf public root_object, not the private _root_object
+# FIX D - use pypdf public root_object, not the private _root_object
 def test_engine_uses_public_root_object():
     # The public attribute exists on this pinned pypdf version.
     assert hasattr(pypdf.PdfWriter(), "root_object")
@@ -165,7 +165,7 @@ def test_engine_uses_public_root_object():
     assert "writer.root_object" in src
 
 
-# FIX G — fill() checks a checkbox using its actual /AP /N on-state name
+# FIX G - fill() checks a checkbox using its actual /AP /N on-state name
 def test_fill_true_uses_actual_on_state():
     pdf = _checkbox_with_on_state("cb", "/On")
     filled = af.fill(pdf, {"cb": True})

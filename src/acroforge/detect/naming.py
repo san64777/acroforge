@@ -79,7 +79,7 @@ def name_for(
         left.append(w)
     if left:
         if len(left) > _MAX_LABEL_WORDS:
-            # More words than the cap indicates a dense/paragraph context — skip to fallback.
+            # More words than the cap indicates a dense/paragraph context - skip to fallback.
             pass
         else:
             # Pick the _MAX_LABEL_WORDS nearest words by x-distance to the field, then re-sort left→right.

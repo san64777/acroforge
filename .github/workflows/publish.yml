@@ -3,7 +3,7 @@ on:
   release:
     types: [published]
 
-# Publishes to PyPI via Trusted Publishing (OIDC) — no API token/secret needed.
+# Publishes to PyPI via Trusted Publishing (OIDC) - no API token/secret needed.
 jobs:
   pypi-publish:
     runs-on: ubuntu-latest
