@@ -19,9 +19,13 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
     ArrayObject,
     BooleanObject,
+    DecodedStreamObject,
     DictionaryObject,
+    FloatObject,
     IndirectObject,
     NameObject,
+    NumberObject,
+    TextStringObject,
 )
 from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
@@ -63,6 +67,21 @@ def _draw_widget(form: object, spec: FieldSpec) -> None:
             borderWidth=1,
             forceBorder=True,
         )
+    elif spec.type is FieldType.COMB:
+        form.textfield(  # type: ignore[attr-defined]
+            name=spec.name,
+            value="",
+            x=x0,
+            y=y0,
+            width=w,
+            height=h,
+            fontSize=min(12, h - 2),
+            borderStyle="solid",
+            borderWidth=1,
+            forceBorder=True,
+            fieldFlags="comb",
+            maxlen=spec.maxlen or 1,
+        )
     else:
         raise NotImplementedError(f"field type {spec.type} added in a later task")
 
@@ -94,6 +113,53 @@ def _overlay_for_page(page_w: float, page_h: float, specs: list[FieldSpec]) -> b
     return buf.getvalue()
 
 
+def _build_signature_widget(
+    writer: PdfWriter, spec: FieldSpec, page_ref: IndirectObject
+) -> IndirectObject:
+    """Build an UNSIGNED ``/Sig`` placeholder widget and register its objects.
+
+    reportlab has no signature helper, so the widget is assembled directly from
+    pypdf objects: a ``/FT /Sig`` widget annotation with an empty bordered-box
+    ``/AP`` ``/N`` appearance stream so it renders as a visible placeholder.
+    This is a placeholder field only — not a digital-signature workflow.
+    """
+    x0, y0, x1, y1 = spec.rect
+    w, h = x1 - x0, y1 - y0
+
+    ap_stream = DecodedStreamObject()
+    # Stroke a 1pt black rectangle inset by 0.5pt so the border sits inside /BBox.
+    ap_stream.set_data(
+        f"1 w 0 0 0 RG 0.5 0.5 {w - 1:.2f} {h - 1:.2f} re S".encode("latin-1")
+    )
+    ap_stream[NameObject("/Type")] = NameObject("/XObject")
+    ap_stream[NameObject("/Subtype")] = NameObject("/Form")
+    ap_stream[NameObject("/FormType")] = NumberObject(1)
+    ap_stream[NameObject("/BBox")] = ArrayObject(
+        [FloatObject(0), FloatObject(0), FloatObject(w), FloatObject(h)]
+    )
+    ap_ref = writer._add_object(ap_stream)
+
+    ap = DictionaryObject()
+    ap[NameObject("/N")] = ap_ref
+
+    mk = DictionaryObject()
+    mk[NameObject("/BC")] = ArrayObject([NumberObject(0), NumberObject(0), NumberObject(0)])
+
+    widget = DictionaryObject()
+    widget[NameObject("/Type")] = NameObject("/Annot")
+    widget[NameObject("/Subtype")] = NameObject("/Widget")
+    widget[NameObject("/FT")] = NameObject("/Sig")
+    widget[NameObject("/T")] = TextStringObject(spec.name)
+    widget[NameObject("/Rect")] = ArrayObject(
+        [FloatObject(x0), FloatObject(y0), FloatObject(x1), FloatObject(y1)]
+    )
+    widget[NameObject("/F")] = NumberObject(4)  # Print
+    widget[NameObject("/P")] = page_ref
+    widget[NameObject("/MK")] = mk
+    widget[NameObject("/AP")] = ap
+    return writer._add_object(widget)
+
+
 class ReportlabPypdfWriter:
     """Writer backend: creates AcroForm fields via reportlab overlays + pypdf."""
 
@@ -101,9 +167,15 @@ class ReportlabPypdfWriter:
         writer = PdfWriter()
         writer.append(PdfReader(io.BytesIO(pdf)))
 
+        # SIGNATURE widgets are built directly (reportlab has no /Sig helper) and
+        # are kept out of the overlay loop; everything else goes via reportlab.
         by_page: defaultdict[int, list[FieldSpec]] = defaultdict(list)
+        sig_by_page: defaultdict[int, list[FieldSpec]] = defaultdict(list)
         for f in fields:
-            by_page[f.page].append(f)
+            if f.type is FieldType.SIGNATURE:
+                sig_by_page[f.page].append(f)
+            else:
+                by_page[f.page].append(f)
 
         root = writer._root_object
         if "/AcroForm" not in root:
@@ -148,6 +220,18 @@ class ReportlabPypdfWriter:
             else:
                 base_page[NameObject("/Annots")] = ArrayObject(annot_refs)
             acro[NameObject("/Fields")].extend(field_refs)  # type: ignore[attr-defined]
+
+        for page_idx, sig_specs in sig_by_page.items():
+            base_page = writer.pages[page_idx]
+            page_ref = cast(IndirectObject, base_page.indirect_reference)
+            sig_refs = [
+                _build_signature_widget(writer, spec, page_ref) for spec in sig_specs
+            ]
+            if "/Annots" in base_page:
+                base_page[NameObject("/Annots")].extend(sig_refs)  # type: ignore[attr-defined]
+            else:
+                base_page[NameObject("/Annots")] = ArrayObject(sig_refs)
+            acro[NameObject("/Fields")].extend(sig_refs)  # type: ignore[attr-defined]
 
         acro[NameObject("/NeedAppearances")] = BooleanObject(False)
         if "/XFA" in acro:
