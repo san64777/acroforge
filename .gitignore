@@ -15,3 +15,6 @@ harness/node_modules/
 # spike outputs (throwaway dev artifacts)
 spikes/*.pdf
 spikes/*.png
+
+# demo output artifacts
+examples/output/
