@@ -166,7 +166,13 @@ class FieldSpec(BaseModel):
 
 In addition to the deterministic engine, acroforge ships an **optional, best-effort**
 detector that *guesses* where fields belong on a flat vector PDF by reading its
-vector geometry (underline rules, small square boxes) and nearby text labels.
+vector geometry and nearby text labels. It handles both common form archetypes:
+
+- **Underline forms** — write-on rules become text fields.
+- **Table/grid forms** — bordered table cells become text fields (label-aware: the
+  field is placed in the writable area below the label, multi-column cells are split,
+  and section-header rows are skipped).
+- **Checkboxes** — both vector squares and font glyphs (☐ / ☑ / ☒).
 
 ```python
 import acroforge as af
