@@ -3,6 +3,7 @@ from __future__ import annotations
 from acroforge.detect.manifest import detect_manifest
 from acroforge.engine.base import default_writer
 from acroforge.models import FieldSpec, FormManifest
+from acroforge.read import read_fields as _read_fields
 
 
 def build(pdf: bytes, fields: list[FieldSpec]) -> bytes:
@@ -26,6 +27,17 @@ def detect(pdf: bytes | str) -> FormManifest:
     Raises ScannedPDFError on scans.
     """
     return detect_manifest(pdf)
+
+
+def read_fields(pdf: bytes | str) -> list[FieldSpec]:
+    """Read existing AcroForm fields out of an already-fillable PDF.
+
+    Returns one FieldSpec per /Widget annotation (so a radio group yields one
+    spec per button, sharing a name). Because these are real, registered fields
+    rather than geometry guesses, every spec has confidence = 1.0. This makes
+    the API symmetric: build(pdf, read_fields(other_pdf)).
+    """
+    return _read_fields(pdf)
 
 
 def make_fillable(pdf: bytes) -> bytes:
