@@ -3,11 +3,32 @@ import io
 
 import pypdf
 import pytest
+from pypdf.generic import NameObject
 
 import acroforge as af
 from acroforge.engine.backends import reportlab_pypdf
 from acroforge.models import FieldSpec, FieldType
 from tests.test_engine_text_checkbox import _blank_pdf
+
+
+def _checkbox_with_on_state(name: str, on: str) -> bytes:
+    """An acroforge checkbox whose /AP /N on-state key is `on` (e.g. "/On")."""
+    built = af.build(
+        _blank_pdf(),
+        [FieldSpec(type=FieldType.CHECKBOX, page=0, rect=(100, 700, 130, 730), name=name)],
+    )
+    w = pypdf.PdfWriter()
+    w.append(pypdf.PdfReader(io.BytesIO(built)))
+    widget = [
+        a.get_object() for a in w.pages[0]["/Annots"] if a.get_object().get("/T") == name
+    ][0]
+    apn = widget["/AP"]["/N"]
+    yes = apn[NameObject("/Yes")]
+    del apn[NameObject("/Yes")]
+    apn[NameObject(on)] = yes
+    out = io.BytesIO()
+    w.write(out)
+    return out.getvalue()
 
 
 def _offset_origin_pdf() -> bytes:
@@ -142,3 +163,26 @@ def test_engine_uses_public_root_object():
     src = inspect.getsource(reportlab_pypdf)
     assert "_root_object" not in src
     assert "writer.root_object" in src
+
+
+# FIX G — fill() checks a checkbox using its actual /AP /N on-state name
+def test_fill_true_uses_actual_on_state():
+    pdf = _checkbox_with_on_state("cb", "/On")
+    filled = af.fill(pdf, {"cb": True})
+    r = pypdf.PdfReader(io.BytesIO(filled))
+    f = r.get_fields() or {}
+    assert f["cb"]["/V"] == "/On"  # not the hard-coded /Yes
+    widget = [
+        a.get_object() for a in r.pages[0]["/Annots"] if a.get_object().get("/T") == "cb"
+    ][0]
+    assert widget["/AS"] == "/On"
+
+
+def test_fill_true_keeps_default_yes_on_state():
+    built = af.build(
+        _blank_pdf(),
+        [FieldSpec(type=FieldType.CHECKBOX, page=0, rect=(100, 700, 130, 730), name="cb")],
+    )
+    filled = af.fill(built, {"cb": True})
+    f = pypdf.PdfReader(io.BytesIO(filled)).get_fields() or {}
+    assert f["cb"]["/V"] == "/Yes"

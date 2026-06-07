@@ -162,6 +162,31 @@ def _build_signature_widget(
     return writer._add_object(widget)
 
 
+def _on_state_name(field: DictionaryObject) -> str | None:
+    """Return a button field's on-state name (the ``/AP /N`` key that isn't ``/Off``).
+
+    Looks at the field's own ``/AP /N`` (widget-as-field, e.g. checkbox) and, if it
+    is a group, at its kids. Returns the single on-state name (e.g. ``"/On"``) when
+    there is exactly one, else ``None`` (ambiguous or none found).
+    """
+    states: set[str] = set()
+    sources: list[DictionaryObject] = [field]
+    kids = field.get("/Kids")
+    if kids:
+        sources = [cast(DictionaryObject, k.get_object()) for k in kids]
+    for src in sources:
+        ap = src.get("/AP")
+        if ap is None:
+            continue
+        normal = cast(DictionaryObject, ap.get_object()).get("/N")
+        if normal is None:
+            continue
+        for key in cast(DictionaryObject, normal.get_object()):
+            if key != "/Off":
+                states.add(key)
+    return states.pop() if len(states) == 1 else None
+
+
 class ReportlabPypdfWriter:
     """Writer backend: creates AcroForm fields via reportlab overlays + pypdf."""
 
@@ -270,10 +295,27 @@ class ReportlabPypdfWriter:
         unknown = set(values) - existing
         if unknown:
             raise ValueError(f"fill(): fields not found in PDF: {sorted(unknown)}")
-        str_values: dict[str, str] = {
-            k: (v if isinstance(v, str) else ("/Yes" if v is True else str(v)))
-            for k, v in values.items()
-        }
+        # Map field name -> its AcroForm field dict so a boolean True resolves to
+        # the field's real on-state (e.g. /On, /Checked) rather than a hard /Yes.
+        field_dicts: dict[str, DictionaryObject] = {}
+        acroform = reader.root_object.get("/AcroForm")
+        if acroform is not None:
+            for ref in cast(DictionaryObject, acroform.get_object()).get("/Fields") or []:
+                fld = cast(DictionaryObject, ref.get_object())
+                name = fld.get("/T")
+                if name is not None:
+                    field_dicts[str(name)] = fld
+
+        def _coerce(key: str, val: object) -> str:
+            if isinstance(val, str):
+                return val
+            if val is True:
+                fld = field_dicts.get(key)
+                on = _on_state_name(fld) if fld is not None else None
+                return on if on is not None else "/Yes"
+            return str(val)
+
+        str_values: dict[str, str] = {k: _coerce(k, v) for k, v in values.items()}
         for page in writer.pages:
             writer.update_page_form_field_values(page, str_values, auto_regenerate=False)
         out = io.BytesIO()
