@@ -245,6 +245,10 @@ class ReportlabPypdfWriter:
         reader = PdfReader(io.BytesIO(pdf))
         writer = PdfWriter()
         writer.append(reader)
+        existing = set(reader.get_fields() or {})
+        unknown = set(values) - existing
+        if unknown:
+            raise ValueError(f"fill(): fields not found in PDF: {sorted(unknown)}")
         str_values: dict[str, str] = {
             k: (v if isinstance(v, str) else ("/Yes" if v is True else str(v)))
             for k, v in values.items()
