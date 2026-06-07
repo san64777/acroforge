@@ -56,3 +56,30 @@ def test_find_boxes_returns_small_square_checkbox_candidates():
     assert len(cands) == 2
     assert all(c.kind == "checkbox" for c in cands)
     assert all(8 <= (c.rect[2] - c.rect[0]) <= 20 for c in cands)
+
+
+def _pdf_with_table_and_underline() -> bytes:
+    import io
+
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(612, 792))
+    c.rect(100, 600, 200, 20)        # a closed box (cell): top/bottom edges bounded by L/R verticals
+    c.line(100, 700, 300, 700)       # a bare underline with OPEN ends
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def test_find_underlines_skips_box_edges_keeps_bare_underline():
+    import io
+
+    import pdfplumber
+
+    from acroforge.detect.geometry import find_underlines
+
+    with pdfplumber.open(io.BytesIO(_pdf_with_table_and_underline())) as pdf:
+        cands = find_underlines(pdf.pages[0])
+    ys = sorted(round(c.rect[1]) for c in cands)
+    assert ys == [700]    # box top/bottom edges filtered; bare underline survives

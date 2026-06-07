@@ -36,6 +36,50 @@ def _rule_rects(page: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _is_vertical(obj: dict[str, Any], tol: float = 1.5) -> bool:
+    return abs(float(obj["x1"]) - float(obj["x0"])) <= tol
+
+
+def _vertical_segments(page: Any) -> list[tuple[float, float, float]]:
+    """Vertical rules as (x, y_lo, y_hi) in PDF-native bottom-up coords.
+
+    Pulls verticals from: vertical lines, vertical edges, and BOTH side
+    verticals (x0 and x1, each spanning y0..y1) of every page.rects entry.
+    """
+    out: list[tuple[float, float, float]] = []
+    for line in page.lines:
+        if _is_vertical(line):
+            x = float(line["x0"])
+            y0, y1 = float(line["y0"]), float(line["y1"])
+            out.append((x, min(y0, y1), max(y0, y1)))
+    for edge in page.edges:
+        if edge.get("orientation") == "v":
+            x = float(edge["x0"])
+            y0, y1 = float(edge["y0"]), float(edge["y1"])
+            out.append((x, min(y0, y1), max(y0, y1)))
+    for r in page.rects:
+        x0, x1 = float(r["x0"]), float(r["x1"])
+        y0, y1 = float(r["y0"]), float(r["y1"])
+        y_lo, y_hi = min(y0, y1), max(y0, y1)
+        out.append((x0, y_lo, y_hi))
+        out.append((x1, y_lo, y_hi))
+    return out
+
+
+def _end_near_vertical(
+    x: float,
+    y: float,
+    verts: list[tuple[float, float, float]],
+    xtol: float = 3.0,
+    ytol: float = 3.0,
+) -> bool:
+    """True if (x, y) sits at the end of any vertical rule."""
+    for vx, y_lo, y_hi in verts:
+        if abs(vx - x) <= xtol and (y_lo - ytol) <= y <= (y_hi + ytol):
+            return True
+    return False
+
+
 def find_underlines(page: Any) -> list[Candidate]:
     out: list[Candidate] = []
     segs = (
@@ -43,6 +87,7 @@ def find_underlines(page: Any) -> list[Candidate]:
         + [e for e in page.edges if e.get("orientation") == "h"]
         + _rule_rects(page)
     )
+    verts = _vertical_segments(page)
     seen: set[tuple[int, int, int]] = set()
     for s in segs:
         if not _is_horizontal(s):
@@ -50,6 +95,10 @@ def find_underlines(page: Any) -> list[Candidate]:
         x0, x1 = float(s["x0"]), float(s["x1"])
         y = float(s["y0"])
         if (x1 - x0) < _MIN_UNDERLINE_W:
+            continue
+        # A write-on underline has OPEN ends; a table/box edge is bounded by
+        # vertical rules at BOTH ends. Skip the latter.
+        if _end_near_vertical(x0, y, verts) and _end_near_vertical(x1, y, verts):
             continue
         key = (round(x0), round(x1), round(y))
         if key in seen:
