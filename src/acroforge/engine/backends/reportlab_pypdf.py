@@ -256,4 +256,27 @@ class ReportlabPypdfWriter:
         return out.getvalue()
 
     def flatten(self, pdf: bytes) -> bytes:
-        raise NotImplementedError("flatten: later task")
+        reader = PdfReader(io.BytesIO(pdf))
+        writer = PdfWriter()
+        writer.append(reader)
+        # pypdf 6.13 only bakes an /AP into the page content for fields named in
+        # the ``fields`` mapping (the flatten path lives inside that loop), so an
+        # empty mapping bakes nothing. Re-supply each field's existing ``/V`` so
+        # ``flatten=True`` draws the appearance XObject into the page stream.
+        values: dict[str, str] = {}
+        for name, info in (reader.get_fields() or {}).items():
+            value = info.get("/V")
+            if value is not None:
+                values[name] = value if isinstance(value, str) else str(value)
+        for page in writer.pages:
+            writer.update_page_form_field_values(
+                page, values, auto_regenerate=False, flatten=True
+            )
+        # Drop the now-redundant interactive layer: widget annotations + AcroForm.
+        writer.remove_annotations(subtypes="/Widget")
+        root = writer._root_object
+        if "/AcroForm" in root:
+            del root[NameObject("/AcroForm")]
+        out = io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
