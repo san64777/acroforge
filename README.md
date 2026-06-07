@@ -221,6 +221,25 @@ acroforge make-fillable form.pdf fillable.pdf
 - **No AI.** There are no models, no inference, no network calls - just deterministic
   geometry heuristics over the PDF's own vectors.
 
+## Reading existing fields
+
+`read_fields(pdf)` ingests the AcroForm fields already present in a fillable PDF as `FieldSpec`s (real registered fields, so `confidence = 1.0`). It is the inverse of `build`, so the two round-trip:
+
+```python
+import acroforge as af
+
+specs = af.read_fields(open("fillable.pdf", "rb").read())   # -> list[FieldSpec]
+for s in specs:
+    print(s.type.value, s.name, s.rect)
+
+# copy one form's field layout onto another PDF
+af.build(other_pdf, af.read_fields(template_pdf))
+```
+
+(One `FieldSpec` per widget, with coordinates, type, name, and checkbox/radio on-states recovered. Dropdowns are reported as text. Pushbuttons are skipped.)
+
+---
+
 ## Scope and honest limits
 
 **The reliable part is the deterministic `build` / `fill` / `flatten` engine.** You

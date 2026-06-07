@@ -1,6 +1,6 @@
 [project]
 name = "acroforge"
-version = "0.1.1"
+version = "0.2.0"
 description = "Turn flat PDFs into real, fillable AcroForms - permissive, deterministic, zero-copyleft."
 readme = "README.md"
 requires-python = ">=3.11"
