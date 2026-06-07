@@ -10,6 +10,25 @@ from acroforge.models import FieldSpec, FieldType
 from tests.test_engine_text_checkbox import _blank_pdf
 
 
+def _offset_origin_pdf() -> bytes:
+    """A 1-page PDF whose MediaBox lower-left is non-zero: [36 36 648 828]."""
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(612, 792))
+    c.drawString(100, 100, "base")
+    c.showPage()
+    c.save()
+    w = pypdf.PdfWriter()
+    w.append(pypdf.PdfReader(io.BytesIO(buf.getvalue())))
+    pg = w.pages[0]
+    pg.mediabox.lower_left = (36, 36)
+    pg.mediabox.upper_right = (648, 828)
+    out = io.BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
 # FIX A — fill() must raise on unknown field names
 def test_fill_unknown_field_raises():
     built = af.build(
@@ -67,6 +86,52 @@ def test_radio_kid_widgets_are_indirect_objects():
         assert kid.indirect_reference is not None
         assert (kid.idnum, kid.generation) in annot_ids  # kid is on the page
         assert kid.get_object()["/Subtype"] == "/Widget"
+
+
+# FIX F — non-zero MediaBox origin: field lands at the correct visual location
+def test_field_on_offset_origin_mediabox_renders_in_place(tmp_path):
+    from harness.diff import png_mismatch_ratio
+    from harness.render_pdfium import render_pdfium
+    from PIL import Image, ImageChops
+
+    base = _offset_origin_pdf()
+    rect = (100.0, 700.0, 130.0, 730.0)
+    built = af.fill(
+        af.build(base, [FieldSpec(type=FieldType.CHECKBOX, page=0, rect=rect, name="cb")]),
+        {"cb": True},
+    )
+
+    # The widget /Rect must equal the requested rect (page coordinate space).
+    r = pypdf.PdfReader(io.BytesIO(built))
+    widget = [
+        a.get_object() for a in r.pages[0]["/Annots"] if a.get_object().get("/T") == "cb"
+    ][0]
+    assert tuple(float(v) for v in widget["/Rect"]) == rect
+
+    # The field must add visible ink versus the blank base, in the expected region.
+    base_pdf = tmp_path / "base.pdf"
+    built_pdf = tmp_path / "built.pdf"
+    base_pdf.write_bytes(base)
+    built_pdf.write_bytes(built)
+    pa = render_pdfium(str(base_pdf), tmp_path / "base.png", scale=2.0)
+    pb = render_pdfium(str(built_pdf), tmp_path / "built.png", scale=2.0)
+    assert png_mismatch_ratio(pa, pb) > 0.0  # ink appeared somewhere
+
+    # Expected pixel region: rect minus MediaBox origin (36,36), y from page top.
+    # box = [36 36 648 828] -> w=612 h=792; scale 2.0.
+    x0_px = int((rect[0] - 36) * 2)
+    x1_px = int((rect[2] - 36) * 2)
+    top_px = int((828 - rect[3]) * 2)
+    bot_px = int((828 - rect[1]) * 2)
+    diff = ImageChops.difference(
+        Image.open(pa).convert("RGB"), Image.open(pb).convert("RGB")
+    )
+    bbox = diff.getbbox()
+    assert bbox is not None
+    bx0, by0, bx1, by1 = bbox
+    # All ink falls inside the expected checkbox region (no offset bug).
+    assert x0_px - 2 <= bx0 and bx1 <= x1_px + 2
+    assert top_px - 2 <= by0 and by1 <= bot_px + 2
 
 
 # FIX D — use pypdf public root_object, not the private _root_object
