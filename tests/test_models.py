@@ -18,3 +18,13 @@ def test_radio_group_carries_options():
 
 def test_scanned_error_is_exception():
     assert issubclass(ScannedPDFError, Exception)
+
+def test_fieldspec_export_value_defaults_none():
+    from acroforge.models import FieldSpec, FieldType
+    f = FieldSpec(type=FieldType.CHECKBOX, page=0, rect=(0, 0, 10, 10), name="agree")
+    assert f.export_value is None
+
+def test_radio_member_has_export_value():
+    from acroforge.models import FieldSpec, FieldType
+    f = FieldSpec(type=FieldType.RADIO, page=0, rect=(0, 0, 10, 10), name="sex", export_value="M")
+    assert f.export_value == "M"

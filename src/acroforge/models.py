@@ -24,6 +24,7 @@ class FieldSpec(BaseModel):
     name: str
     options: list[str] | None = None  # radio/checkbox group members
     maxlen: int | None = None  # comb cell count
+    export_value: str | None = None   # radio member on-value / checkbox on-state
     confidence: float = 1.0  # 1.0 = explicit; <1.0 = best-effort guess
 
     @field_validator("rect")
