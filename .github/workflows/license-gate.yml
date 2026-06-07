@@ -1,0 +1,10 @@
+name: license-gate
+on: [push, pull_request]
+jobs:
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install --system -e ".[dev,harness,fallback]"
+      - run: pip-licenses --fail-on='GPL;AGPL;LGPL;SSPL' --partial-match
