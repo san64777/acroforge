@@ -10,6 +10,7 @@ dependencies = [
   "pypdf>=6.13.0",
   "reportlab>=4.5.1",
   "PyPDFForm>=3.0",
+  "pydantic>=2",
 ]
 
 [project.optional-dependencies]
