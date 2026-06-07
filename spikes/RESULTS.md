@@ -80,3 +80,58 @@ The single copyleft entry in the PyPDFForm tree is **pikepdf (MPL-2.0)**.
 - Renders: `spikes/pypdfform_pdfium.png` / `spikes/pypdfform_pdfjs.png`,
   `spikes/reportlab_pypdf_pdfium.png` / `spikes/reportlab_pypdf_pdfjs.png`,
   `spikes/pikepdf_pdfium.png` / `spikes/pikepdf_pdfjs.png`
+
+---
+
+# GATE C — Source-Agnostic Stamp (Scanned PDF)
+
+## VERDICT: PASS
+
+**Goal:** prove the reportlab+pypdf engine is source-agnostic — it can stamp a
+filled, registered AcroForm field onto a scanned/image-only PDF page, AND that
+`is_scanned_pdf` correctly flags such a file so auto-detection would refuse it.
+
+## Setup
+
+- **Input fixture:** `tests/fixtures/scanned_sample.pdf`
+  - Page size: 587.52 x 760.32 pt
+  - Content: chars=0, images=1 — confirmed image-only scan
+- **Field stamped:** `af_on_scan` = `STAMPED-ON-SCAN` (text, 11pt)
+  - Positioned at rect [60, 730, 340, 748] — top strip of the scanned page
+- **Output:** `spikes/out_scanned_stamped.pdf`
+
+## Results
+
+| check | result |
+|---|---|
+| `is_scanned_pdf('tests/fixtures/scanned_sample.pdf')` | **True** — auto-detect correctly guards against this input |
+| stamped field registered in `/AcroForm /Fields` | **True** |
+| field value read back via `pypdf.get_fields()` | **`STAMPED-ON-SCAN`** |
+| pdfium stamped-vs-original pixel mismatch ratio | **0.0116** (non-zero — new ink visible) |
+| pdf.js stamped-vs-original pixel mismatch ratio | **0.0116** (non-zero — new ink visible) |
+
+## Interpretation
+
+- `is_scanned_pdf` returns `True` for the input — the auto-detect layer would
+  refuse to treat this as a native-text PDF, which is the correct safety gate.
+- The engine nonetheless *can* stamp the field (the engine itself is
+  source-agnostic; the guard is a policy decision above it).
+- Both rendering engines (pdfium/Chrome and pdf.js/Firefox) show a non-trivial
+  mismatch ratio of 0.0116 between the stamped and original renders, confirming
+  that the field's appearance stream introduced visible new ink on the page.
+
+## Technique
+
+Identical to Gate A (reportlab overlay + pypdf clone-and-register):
+1. Reportlab draws the widget onto a same-size blank canvas (matches the
+   scanned page's 587.52 x 760.32 pt mediabox).
+2. Widget annotation is cloned into the PdfWriter that holds the scanned base.
+3. The cloned ref is appended to the base page `/Annots`.
+4. The ref is also appended to `/AcroForm /Fields` for spec-correct enumeration.
+5. `/NeedAppearances` forced off so embedded `/AP` streams are honoured.
+
+## Files produced
+
+- Probe: `spikes/gate_c_scanned_stamp.py`
+- Output: `spikes/out_scanned_stamped.pdf`
+- Renders: `spikes/gatec_pdfium.png` / `spikes/gatec_pdfjs.png`
