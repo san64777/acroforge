@@ -73,7 +73,22 @@ def _overlay_for_page(page_w: float, page_h: float, specs: list[FieldSpec]) -> b
     c = canvas.Canvas(buf, pagesize=(page_w, page_h))
     form = c.acroForm
     for s in specs:
-        _draw_widget(form, s)
+        if s.type is FieldType.RADIO:
+            x0, y0, x1, y1 = s.rect
+            form.radio(
+                name=s.name,
+                value=(s.export_value or "On"),
+                selected=False,
+                x=x0,
+                y=y0,
+                size=min(x1 - x0, y1 - y0),
+                buttonStyle="check",
+                borderStyle="solid",
+                borderWidth=1,
+                forceBorder=True,
+            )
+        else:
+            _draw_widget(form, s)
     c.showPage()
     c.save()
     return buf.getvalue()
@@ -105,16 +120,34 @@ class ReportlabPypdfWriter:
             overlay = PdfReader(
                 io.BytesIO(_overlay_for_page(float(box.width), float(box.height), specs))
             )
-            new_refs: list[IndirectObject] = []
-            for annot in overlay.pages[0].get("/Annots") or []:
-                cloned = annot.get_object().clone(writer)
-                cloned[NameObject("/P")] = base_page.indirect_reference
-                new_refs.append(cloned.indirect_reference)
+            overlay_root = cast(DictionaryObject, overlay.trailer["/Root"].get_object())
+            overlay_acro = cast(
+                DictionaryObject, overlay_root["/AcroForm"].get_object()
+            )
+            field_refs: list[IndirectObject] = []
+            annot_refs: list[IndirectObject] = []
+            for fld in overlay_acro.get("/Fields") or []:
+                cloned = fld.get_object().clone(writer)
+                kids = cloned.get("/Kids")
+                if kids:
+                    # Group field (e.g. radio): the page widgets are its kids;
+                    # repoint each kid's /P and add the kids — not the parent —
+                    # to the page /Annots; register the parent in /Fields.
+                    for kid in kids:
+                        kid_obj = cast(DictionaryObject, kid.get_object())
+                        kid_obj[NameObject("/P")] = base_page.indirect_reference
+                        annot_refs.append(kid.indirect_reference)
+                else:
+                    # Widget-as-field (text/checkbox): one object is both the
+                    # field and the page annotation.
+                    cloned[NameObject("/P")] = base_page.indirect_reference
+                    annot_refs.append(cloned.indirect_reference)
+                field_refs.append(cloned.indirect_reference)
             if "/Annots" in base_page:
-                base_page[NameObject("/Annots")].extend(new_refs)  # type: ignore[attr-defined]
+                base_page[NameObject("/Annots")].extend(annot_refs)  # type: ignore[attr-defined]
             else:
-                base_page[NameObject("/Annots")] = ArrayObject(new_refs)
-            acro[NameObject("/Fields")].extend(new_refs)  # type: ignore[attr-defined]
+                base_page[NameObject("/Annots")] = ArrayObject(annot_refs)
+            acro[NameObject("/Fields")].extend(field_refs)  # type: ignore[attr-defined]
 
         acro[NameObject("/NeedAppearances")] = BooleanObject(False)
         if "/XFA" in acro:
