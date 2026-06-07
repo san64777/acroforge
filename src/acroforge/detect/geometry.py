@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from acroforge.detect.naming import label_from_cell_text
+from acroforge.detect.naming import label_from_cell_text, slugify
 
 
 @dataclass
@@ -192,6 +193,81 @@ _CELL_MIN_H = 12.0
 _CELL_MAX_H = 60.0  # taller cells are instruction/paragraph blocks, not inputs
 _CELL_MAX_TXT = 120  # longer text means a paragraph/instruction cell, not an input
 
+# Words whose `top` values fall within this many points belong to one text line.
+_LINE_TOL = 4.0
+# A header cell must be wider than this fraction of the page.
+_HEADER_WIDTH_FRAC = 0.8
+# A header's largest glyph must exceed this multiple of the page body font size.
+_HEADER_SIZE_FACTOR = 1.2
+# Minimum writable height (points) below the label line; under this we fall back.
+_MIN_WRITABLE_H = 8.0
+# Horizontal gap (points) between top-line words that starts a new label cluster.
+_SPLIT_MIN_GAP = 35.0
+_SPLIT_GAP_FACTOR = 2.5
+# First N words of a cluster used to name its split field (matches label_from_cell_text).
+_CLUSTER_NAME_WORDS = 3
+
+
+def _body_font_size(page: Any) -> float | None:
+    """Median glyph size across the page, or None if no sized chars exist."""
+    sizes = [float(c["size"]) for c in page.chars if "size" in c]
+    if not sizes:
+        return None
+    return float(statistics.median(sizes))
+
+
+def _top_line_words(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The topmost line of words: those within _LINE_TOL of the minimum `top`."""
+    if not words:
+        return []
+    min_top = min(float(w["top"]) for w in words)
+    return [w for w in words if float(w["top"]) <= min_top + _LINE_TOL]
+
+
+def _is_header_cell(
+    x0: float,
+    x1: float,
+    words: list[dict[str, Any]],
+    page_width: float,
+    body_size: float | None,
+) -> bool:
+    """True if the cell is a large, full-width, single-line section header."""
+    if body_size is None or not words:
+        return False
+    if (x1 - x0) <= _HEADER_WIDTH_FRAC * page_width:
+        return False
+    tops = [float(w["top"]) for w in words]
+    if (max(tops) - min(tops)) > _LINE_TOL:  # more than one text line
+        return False
+    max_size = max((float(w["size"]) for w in words if "size" in w), default=0.0)
+    return max_size > _HEADER_SIZE_FACTOR * body_size
+
+
+def _label_clusters(top_line: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Cluster top-line words by horizontal gaps into label groups (left→right)."""
+    if not top_line:
+        return []
+    ordered = sorted(top_line, key=lambda w: float(w["x0"]))
+    if len(ordered) < 2:
+        return [ordered]
+    gaps = [
+        float(ordered[i + 1]["x0"]) - float(ordered[i]["x1"]) for i in range(len(ordered) - 1)
+    ]
+    threshold = max(_SPLIT_MIN_GAP, _SPLIT_GAP_FACTOR * statistics.median(gaps))
+    clusters: list[list[dict[str, Any]]] = [[ordered[0]]]
+    for i, w in enumerate(ordered[1:], start=1):
+        if gaps[i - 1] > threshold:
+            clusters.append([w])
+        else:
+            clusters[-1].append(w)
+    return clusters
+
+
+def _cluster_slug(cluster: list[dict[str, Any]]) -> str:
+    """Slug for a cluster's words (first N words joined), matching cell naming."""
+    words = [str(w["text"]) for w in cluster][:_CLUSTER_NAME_WORDS]
+    return slugify(" ".join(words))
+
 
 def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
     """Treat each suitable bordered table cell as a TEXT field candidate.
@@ -204,9 +280,17 @@ def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
     Returns `(Candidate, label_slug)` pairs; the slug is derived from the cell's
     text (may be "" — callers supply a fallback). Cells that are too small/tall,
     hold a checkbox glyph, or contain paragraph-length text are skipped.
+
+    Three precision refinements run per passing cell (each may add 0..N fields):
+      A. Skip large, full-width, single-line section-header cells.
+      B. Shrink the field to the writable area BELOW the cell's label line.
+      C. Split a cell holding multiple horizontally separated labels into one
+         field per label, named from that label's own words.
     """
     out: list[tuple[Candidate, str]] = []
     height = float(page.height)
+    page_width = float(page.width)
+    body_size = _body_font_size(page)
     seen: set[tuple[int, int]] = set()
     for table in page.find_tables():
         for cell in table.cells:
@@ -225,15 +309,52 @@ def find_table_cells(page: Any) -> list[tuple[Candidate, str]]:
                 continue  # checkbox cell, handled by find_boxes/find_glyph_checkboxes
             if len(txt) > _CELL_MAX_TXT:
                 continue  # paragraph/instruction cell, not an input
-            rx0 = x0 + 1.0
-            rx1 = x1 - 1.0
-            ry0 = height - bottom + 1.0
-            ry1 = height - top - 1.0
-            if rx1 <= rx0 or ry1 <= ry0:
+
+            # Cell words in TOP-DOWN coords (top/bottom from page top); request
+            # per-word font size so the header test can compare against body size.
+            try:
+                cell_words = page.crop(cell).extract_words(extra_attrs=["size"])
+            except Exception:
+                cell_words = []
+
+            # Refinement A — skip section-header cells.
+            if _is_header_cell(x0, x1, cell_words, page_width, body_size):
                 continue
-            key = (round(rx0), round(ry0))
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append((Candidate("text", (rx0, ry0, rx1, ry1), 0.5), label_from_cell_text(txt)))
+
+            # Refinement B — find the writable area below the label line.
+            top_line = _top_line_words(cell_words)
+            if top_line:
+                label_bottom = max(float(w_["bottom"]) for w_ in top_line) + 1.0
+                if (bottom - label_bottom) < _MIN_WRITABLE_H:
+                    label_bottom = top  # too short: label & input share the line
+            else:
+                label_bottom = top  # empty input cell: use the whole cell
+            write_top = label_bottom  # top-down top edge of the writable region
+
+            # Refinement C — split multi-label cells by the top line's clusters.
+            clusters = _label_clusters(top_line)
+            if len(clusters) > 1:
+                spans: list[tuple[float, float, str]] = []
+                for i, cluster in enumerate(clusters):
+                    left = float(cluster[0]["x0"])
+                    right = x1 if i == len(clusters) - 1 else float(clusters[i + 1][0]["x0"])
+                    left = max(x0, min(left, x1))
+                    right = max(x0, min(right, x1))
+                    spans.append((left, right, _cluster_slug(cluster)))
+            else:
+                slug = _cluster_slug(clusters[0]) if clusters else label_from_cell_text(txt)
+                spans = [(x0, x1, slug)]
+
+            for sx0, sx1, slug in spans:
+                rx0 = sx0 + 1.0
+                rx1 = sx1 - 1.0
+                ry0 = height - bottom + 1.0
+                ry1 = height - write_top - 1.0
+                if rx1 <= rx0 or ry1 <= ry0:
+                    continue  # degenerate
+                key = (round(rx0), round(ry0))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append((Candidate("text", (rx0, ry0, rx1, ry1), 0.5), slug))
     return out
