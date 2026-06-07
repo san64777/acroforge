@@ -167,6 +167,14 @@ class ReportlabPypdfWriter:
         writer = PdfWriter()
         writer.append(PdfReader(io.BytesIO(pdf)))
 
+        n_pages = len(writer.pages)
+        for f in fields:
+            if not 0 <= f.page < n_pages:
+                raise ValueError(
+                    f"FieldSpec '{f.name}' references page {f.page} "
+                    f"but PDF has {n_pages} page(s)"
+                )
+
         # SIGNATURE widgets are built directly (reportlab has no /Sig helper) and
         # are kept out of the overlay loop; everything else goes via reportlab.
         by_page: defaultdict[int, list[FieldSpec]] = defaultdict(list)

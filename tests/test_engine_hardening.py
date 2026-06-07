@@ -26,3 +26,10 @@ def test_fill_known_field_still_works():
     filled = af.fill(built, {"nm": "ok"})
     f = pypdf.PdfReader(io.BytesIO(filled)).get_fields() or {}
     assert f["nm"]["/V"] == "ok"
+
+
+# FIX B — create_fields rejects out-of-range page index
+def test_create_fields_out_of_range_page_raises():
+    spec = FieldSpec(type=FieldType.TEXT, page=3, rect=(100, 700, 300, 718), name="oops")
+    with pytest.raises(ValueError, match="oops"):
+        af.build(_blank_pdf(), [spec])
