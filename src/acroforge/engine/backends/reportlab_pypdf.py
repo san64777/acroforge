@@ -137,6 +137,7 @@ def _build_signature_widget(
     ap_stream[NameObject("/BBox")] = ArrayObject(
         [FloatObject(0), FloatObject(0), FloatObject(w), FloatObject(h)]
     )
+    # pypdf <7: no public add_object; pin enforced in pyproject
     ap_ref = writer._add_object(ap_stream)
 
     ap = DictionaryObject()
@@ -157,6 +158,7 @@ def _build_signature_widget(
     widget[NameObject("/P")] = page_ref
     widget[NameObject("/MK")] = mk
     widget[NameObject("/AP")] = ap
+    # pypdf <7: no public add_object; pin enforced in pyproject
     return writer._add_object(widget)
 
 
@@ -188,10 +190,11 @@ class ReportlabPypdfWriter:
             else:
                 by_page[f.page].append(f)
 
-        root = writer._root_object
+        root = writer.root_object
         if "/AcroForm" not in root:
             acro = DictionaryObject()
             acro[NameObject("/Fields")] = ArrayObject()
+            # pypdf <7: no public add_object; pin enforced in pyproject
             root[NameObject("/AcroForm")] = writer._add_object(acro)
         acro = cast(DictionaryObject, root["/AcroForm"].get_object())
         if "/Fields" not in acro:
@@ -289,7 +292,7 @@ class ReportlabPypdfWriter:
             )
         # Drop the now-redundant interactive layer: widget annotations + AcroForm.
         writer.remove_annotations(subtypes="/Widget")
-        root = writer._root_object
+        root = writer.root_object
         if "/AcroForm" in root:
             del root[NameObject("/AcroForm")]
         out = io.BytesIO()

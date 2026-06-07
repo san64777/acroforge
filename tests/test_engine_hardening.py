@@ -1,9 +1,11 @@
+import inspect
 import io
 
 import pypdf
 import pytest
 
 import acroforge as af
+from acroforge.engine.backends import reportlab_pypdf
 from acroforge.models import FieldSpec, FieldType
 from tests.test_engine_text_checkbox import _blank_pdf
 
@@ -42,3 +44,13 @@ def test_empty_fields_list_is_noop():
     assert "/AcroForm" not in r.trailer["/Root"]
     assert not (r.get_fields() or {})
     assert len(r.pages) == 1  # still opens
+
+
+# FIX D — use pypdf public root_object, not the private _root_object
+def test_engine_uses_public_root_object():
+    # The public attribute exists on this pinned pypdf version.
+    assert hasattr(pypdf.PdfWriter(), "root_object")
+    # The engine source no longer reaches into the private attribute.
+    src = inspect.getsource(reportlab_pypdf)
+    assert "_root_object" not in src
+    assert "writer.root_object" in src

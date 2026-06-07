@@ -41,7 +41,7 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'harness'", specifier = ">=11" },
     { name = "pip-licenses", marker = "extra == 'dev'", specifier = ">=5" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pypdf", specifier = ">=6.13.0" },
+    { name = "pypdf", specifier = ">=6.13.0,<7" },
     { name = "pypdfform", specifier = ">=3.0" },
     { name = "pypdfium2", marker = "extra == 'harness'", specifier = ">=5.9.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
