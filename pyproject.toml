@@ -1,0 +1,31 @@
+[project]
+name = "acroforge"
+version = "0.0.0"
+description = "Turn flat PDFs into real, fillable AcroForms — permissive, deterministic."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "pdfplumber>=0.11.9",
+  "pypdf>=6.13.0",
+  "reportlab>=4.5.1",
+  "PyPDFForm>=3.0",
+]
+
+[project.optional-dependencies]
+fallback = ["pikepdf>=10.7.3"]
+harness = ["pypdfium2>=5.9.0", "Pillow>=11"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "pip-licenses>=5"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

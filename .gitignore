@@ -1,0 +1,14 @@
+# internal-only — keep local
+.claude/
+research/
+docs/
+CLAUDE.md
+# python
+__pycache__/
+*.egg-info/
+.venv/
+dist/
+.pytest_cache/
+.mypy_cache/
+# node (render harness)
+harness/node_modules/
