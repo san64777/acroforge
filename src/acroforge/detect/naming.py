@@ -13,6 +13,10 @@ _LEFT_SLACK = 2.0
 _ROW_TOL = 3.0
 # How far above the field's top edge an above-label may sit, in points.
 _ABOVE_MAX_GAP = 18.0
+# Maximum number of qualifying label words to include.
+_MAX_LABEL_WORDS = 4
+# Maximum slug length (characters) before falling back.
+_MAX_LABEL_LEN = 28
 
 
 def slugify(text: str) -> str:
@@ -38,9 +42,17 @@ def name_for(
     """
     x_left, y0, _x_right, y1 = rect[0], rect[1], rect[2], rect[3]
 
+    def _is_upright(w: dict[str, Any]) -> bool:
+        return bool(w.get("upright", True))
+
+    def _slug_is_valid(slug: str) -> bool:
+        return bool(slug) and len(slug) <= _MAX_LABEL_LEN and len(slug.split("_")) <= _MAX_LABEL_WORDS
+
     # (a) Same-row words to the left of the field, near enough horizontally.
     left: list[dict[str, Any]] = []
     for w in words:
+        if not _is_upright(w):
+            continue
         wx1 = float(w["x1"])
         if wx1 > x_left + _LEFT_SLACK:
             continue
@@ -50,14 +62,23 @@ def name_for(
             continue
         left.append(w)
     if left:
-        left.sort(key=lambda w: float(w["x0"]))
-        slug = slugify(" ".join(str(w["text"]) for w in left))
-        if slug:
-            return slug
+        if len(left) > _MAX_LABEL_WORDS:
+            # More words than the cap indicates a dense/paragraph context — skip to fallback.
+            pass
+        else:
+            # Pick the _MAX_LABEL_WORDS nearest words by x-distance to the field, then re-sort left→right.
+            left.sort(key=lambda w: x_left - float(w["x1"]))
+            left = left[:_MAX_LABEL_WORDS]
+            left.sort(key=lambda w: float(w["x0"]))
+            slug = slugify(" ".join(str(w["text"]) for w in left))
+            if _slug_is_valid(slug):
+                return slug
 
     # (b) Otherwise a word directly above, horizontally overlapping the field.
     above: list[dict[str, Any]] = []
     for w in words:
+        if not _is_upright(w):
+            continue
         wbottom = float(w["bottom"])
         if not (y1 - _ROW_TOL <= wbottom <= y1 + _ABOVE_MAX_GAP):
             continue
@@ -66,8 +87,9 @@ def name_for(
         above.append(w)
     if above:
         above.sort(key=lambda w: (float(w["bottom"]), float(w["x0"])))
+        above = above[:_MAX_LABEL_WORDS]
         slug = slugify(" ".join(str(w["text"]) for w in above))
-        if slug:
+        if _slug_is_valid(slug):
             return slug
 
     return fallback
