@@ -5,7 +5,7 @@ from typing import Any
 
 import pdfplumber
 
-from acroforge.detect.geometry import find_boxes, find_underlines
+from acroforge.detect.geometry import find_boxes, find_glyph_checkboxes, find_underlines
 from acroforge.detect.grouping import group_checkboxes
 from acroforge.detect.naming import name_for
 from acroforge.detect.scanned import is_scanned_page
@@ -66,7 +66,7 @@ def detect_manifest(pdf: str | bytes) -> FormManifest:
                     )
                 )
 
-            boxes = find_boxes(page)
+            boxes = find_boxes(page) + find_glyph_checkboxes(page)
             for gi, group in enumerate(group_checkboxes(boxes)):
                 for bi, cand in enumerate(group):
                     name = name_for(cand.rect, words, fallback=f"checkbox_{pno}_{gi}_{bi}")

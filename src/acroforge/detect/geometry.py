@@ -152,3 +152,33 @@ def find_boxes(page: Any) -> list[Candidate]:
         seen.add(key)
         out.append(Candidate("checkbox", (x0, y0, x1, y1), 0.5))
     return out
+
+
+# Ballot/checkbox glyphs forms use instead of drawn rectangles: ☐ ☑ ☒ □ ■
+_CHECKBOX_GLYPHS = {"☐", "☑", "☒", "□", "■"}
+
+
+def find_glyph_checkboxes(page: Any) -> list[Candidate]:
+    """Checkboxes drawn as font glyphs (☐/☑/☒) rather than vector rects.
+
+    Many real forms (credentialing, government) render checkboxes as characters,
+    which are invisible to find_boxes. Scan page.chars for ballot-box glyphs.
+    """
+    out: list[Candidate] = []
+    seen: set[tuple[int, int]] = set()
+    for ch in getattr(page, "chars", []):
+        if ch.get("text") not in _CHECKBOX_GLYPHS:
+            continue
+        c = _xy(ch)
+        if c is None:
+            continue
+        x0, x1, y0, y1 = c
+        side = max(x1 - x0, y1 - y0)
+        if not (4.0 <= side <= 28.0):
+            continue
+        key = (round(x0), round(y0))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(Candidate("checkbox", (x0, y0, x1, y1), 0.55))
+    return out
