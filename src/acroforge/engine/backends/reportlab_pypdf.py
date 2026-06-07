@@ -242,7 +242,18 @@ class ReportlabPypdfWriter:
         return out.getvalue()
 
     def fill(self, pdf: bytes, values: dict[str, object]) -> bytes:
-        raise NotImplementedError("fill: later task")
+        reader = PdfReader(io.BytesIO(pdf))
+        writer = PdfWriter()
+        writer.append(reader)
+        str_values: dict[str, str] = {
+            k: (v if isinstance(v, str) else ("/Yes" if v is True else str(v)))
+            for k, v in values.items()
+        }
+        for page in writer.pages:
+            writer.update_page_form_field_values(page, str_values, auto_regenerate=False)
+        out = io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
 
     def flatten(self, pdf: bytes) -> bytes:
         raise NotImplementedError("flatten: later task")
