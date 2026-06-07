@@ -18,6 +18,9 @@ fallback = ["pikepdf>=10.7.3"]
 harness = ["pypdfium2>=5.9.0", "Pillow>=11"]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "pip-licenses>=5"]
 
+[project.scripts]
+acroforge = "acroforge.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
