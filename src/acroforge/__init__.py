@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from .api import build, detect, fill, flatten, make_fillable, read_fields
+from .api import build, detect, fill, flatten, make_fillable, read_fields, remove
 from .models import FieldSpec, FieldType, FormManifest, ScannedPDFError
 
 try:
@@ -21,4 +21,5 @@ __all__ = [
     "flatten",
     "make_fillable",
     "read_fields",
+    "remove",
 ]
