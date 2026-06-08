@@ -284,6 +284,12 @@ reliably at exactly the coordinates you give it, on any PDF (vector or scanned).
 `detect()` / `make_fillable()` are the **best-effort** layer described above: use them
 to bootstrap a manifest, then review and hand off the corrected specs to the engine.
 
+**XFA / dynamic forms:** some PDFs (many government forms) carry a dynamic XFA layer over
+the standard AcroForm. acroforge operates on the AcroForm layer - which is what most
+viewers render - and drops the XFA layer on output. Flattened output is unambiguous
+everywhere; for *interactive* output, an XFA-first viewer (some Adobe configurations) may
+prefer the dropped layer, so flatten the result if you need cross-Adobe fidelity.
+
 There is no AI in this package, and no copyrighted form templates are bundled - bring
 your own PDFs.
 
