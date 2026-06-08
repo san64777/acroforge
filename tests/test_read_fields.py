@@ -85,6 +85,105 @@ def test_read_fields_pairs_roundtrip():
     assert ("CA", "California") in spec.options
 
 
+def _foreign_choice_pdf() -> bytes:
+    """A PDF with /Ch fields authored the way a non-acroforge tool would, incl. a
+    parent/kid field whose /FT,/Ff,/Opt are inherited by the kid widget. Exercises
+    read_fields against foreign structures acroforge does not itself emit."""
+    import io as _io
+
+    from pypdf import PdfWriter
+    from pypdf.generic import (
+        ArrayObject,
+        DictionaryObject,
+        FloatObject,
+        NameObject,
+        NumberObject,
+        TextStringObject,
+    )
+
+    w = PdfWriter()
+    w.add_blank_page(width=612, height=792)
+    page = w.pages[0]
+    page_ref = page.indirect_reference
+
+    def _rect(r):
+        return ArrayObject([FloatObject(c) for c in r])
+
+    def _opt_strings(items):
+        return ArrayObject([TextStringObject(s) for s in items])
+
+    def _opt_pairs(pairs):
+        return ArrayObject(
+            [ArrayObject([TextStringObject(e), TextStringObject(d)]) for e, d in pairs]
+        )
+
+    field_refs = ArrayObject()
+    annot_refs = ArrayObject()
+
+    def _flat(name, r, ff, opt):
+        d = DictionaryObject()
+        d[NameObject("/Type")] = NameObject("/Annot")
+        d[NameObject("/Subtype")] = NameObject("/Widget")
+        d[NameObject("/FT")] = NameObject("/Ch")
+        d[NameObject("/T")] = TextStringObject(name)
+        d[NameObject("/Ff")] = NumberObject(ff)
+        d[NameObject("/Opt")] = opt
+        d[NameObject("/Rect")] = _rect(r)
+        d[NameObject("/F")] = NumberObject(4)
+        d[NameObject("/P")] = page_ref
+        ref = w._add_object(d)
+        field_refs.append(ref)
+        annot_refs.append(ref)
+
+    _flat("combo", (50, 700, 250, 718), 1 << 17, _opt_strings(["a", "b", "c"]))
+    _flat("editcombo", (50, 660, 250, 678), (1 << 17) | (1 << 18), _opt_strings(["x", "y"]))
+    _flat("listbox", (50, 560, 250, 640), 0, _opt_strings(["p", "q", "r"]))
+    _flat("multilist", (50, 460, 250, 540), 1 << 21, _opt_strings(["m1", "m2"]))
+    _flat("pairs", (50, 420, 250, 438), 1 << 17, _opt_pairs([("US", "United States"), ("CA", "Canada")]))
+
+    # parent/kid: /FT,/Ff,/Opt live on the parent; the kid widget inherits them
+    parent = DictionaryObject()
+    parent[NameObject("/FT")] = NameObject("/Ch")
+    parent[NameObject("/T")] = TextStringObject("inherited")
+    parent[NameObject("/Ff")] = NumberObject(1 << 17)
+    parent[NameObject("/Opt")] = _opt_strings(["i1", "i2"])
+    parent_ref = w._add_object(parent)
+    kid = DictionaryObject()
+    kid[NameObject("/Type")] = NameObject("/Annot")
+    kid[NameObject("/Subtype")] = NameObject("/Widget")
+    kid[NameObject("/Rect")] = _rect((50, 380, 250, 398))
+    kid[NameObject("/F")] = NumberObject(4)
+    kid[NameObject("/P")] = page_ref
+    kid[NameObject("/Parent")] = parent_ref
+    kid_ref = w._add_object(kid)
+    parent[NameObject("/Kids")] = ArrayObject([kid_ref])
+    field_refs.append(parent_ref)
+    annot_refs.append(kid_ref)
+
+    page[NameObject("/Annots")] = annot_refs
+    acro = DictionaryObject()
+    acro[NameObject("/Fields")] = field_refs
+    w.root_object[NameObject("/AcroForm")] = w._add_object(acro)
+
+    buf = _io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def test_read_fields_foreign_authored_choice():
+    specs = {s.name: s for s in af.read_fields(_foreign_choice_pdf())
+             if s.type == FieldType.CHOICE}
+    assert set(specs) == {"combo", "editcombo", "listbox", "multilist", "pairs", "inherited"}
+    assert not specs["combo"].list_box and not specs["combo"].editable
+    assert specs["editcombo"].editable and not specs["editcombo"].list_box
+    assert specs["listbox"].list_box and not specs["listbox"].multi_select
+    assert specs["multilist"].list_box and specs["multilist"].multi_select
+    assert ("US", "United States") in specs["pairs"].options
+    # /FT, /Ff, /Opt inherited from /Parent are recovered on the kid widget
+    assert not specs["inherited"].list_box
+    assert specs["inherited"].options == ["i1", "i2"]
+
+
 def test_read_fields_radio_roundtrip():
     fields = [
         af.FieldSpec(type=FieldType.RADIO, page=0, rect=(100, 700, 114, 714), name="sex", export_value="M"),

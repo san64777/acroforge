@@ -98,6 +98,21 @@ def test_listbox_is_not_combo():
     assert not (_ff(out, "colors") & _FF_COMBO)
 
 
+def test_listbox_short_rect_does_not_crash():
+    # an 18pt-tall list box used to crash reportlab (ZeroDivisionError); now builds
+    f = FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 700, 300, 718),
+                  name="lb", options=["a", "b", "c"], list_box=True)
+    out = af.build(_blank_pdf(), [f])
+    assert "lb" in (pypdf.PdfReader(io.BytesIO(out)).get_fields() or {})
+
+
+def test_listbox_too_short_raises_clear_error():
+    f = FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 700, 300, 704),
+                  name="lb", options=["a", "b"], list_box=True)
+    with pytest.raises(ValueError, match="too short"):
+        af.build(_blank_pdf(), [f])
+
+
 def test_editable_sets_edit_flag():
     ff = _ff(af.build(_blank_pdf(), [_editable()]), "city")
     assert ff & _FF_COMBO and ff & _FF_EDIT
