@@ -431,9 +431,10 @@ class ReportlabPypdfWriter:
             fd = field_dicts.get(key)
             allowed = _allowed_values(fd)
             if isinstance(val, (list, tuple)):
-                if fd is not None and fd.get("/FT") == "/Ch" and not _is_multiselect(fd):
+                if not _is_multiselect(fd):
                     raise ValueError(
-                        f"fill(): list value given for non-multi-select choice field '{key}'"
+                        f"fill(): list value for '{key}' is only valid for a multi-select "
+                        f"choice field"
                     )
                 items = [str(x) for x in val]
                 if allowed is not None:
@@ -456,6 +457,8 @@ class ReportlabPypdfWriter:
 
     def flatten(self, pdf: bytes) -> bytes:
         reader = PdfReader(io.BytesIO(pdf))
+        if not (reader.get_fields() or {}):
+            return pdf  # no form fields: nothing to bake, return unchanged
         writer = PdfWriter()
         writer.append(reader)
         # pypdf 6.13 only bakes an /AP into the page content for fields named in
