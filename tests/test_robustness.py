@@ -4,7 +4,7 @@ import io
 import warnings
 
 import pytest
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
     ArrayObject,
     DictionaryObject,
@@ -93,3 +93,37 @@ def test_inherited_cycle_does_not_hang():
     buf = io.BytesIO()
     w.write(buf)
     assert isinstance(af.read_fields(buf.getvalue()), list)   # completes (no hang)
+
+
+def test_build_single_member_radio_does_not_crash():
+    # a 1-button radio group crashed reportlab ("has 1 < 2 RadioBoxes"); real
+    # forms have these. Now it builds (converted to a checkbox).
+    f = FieldSpec(type=FieldType.RADIO, page=0, rect=(100, 700, 114, 714),
+                  name="solo", export_value="Y")
+    out = af.build(_blank_pdf(), [f])
+    assert "solo" in (PdfReader(io.BytesIO(out)).get_fields() or {})
+
+
+def test_fill_widget_with_ap_missing_n_does_not_crash():
+    # a widget with /AP but no /N broke pypdf's get_fields() with KeyError '/N';
+    # fill must survive it (real form: cal_poly purchase requisition).
+    w = PdfWriter()
+    w.add_blank_page(width=612, height=792)
+    page = w.pages[0]
+    d = DictionaryObject()
+    d[NameObject("/Type")] = NameObject("/Annot")
+    d[NameObject("/Subtype")] = NameObject("/Widget")
+    d[NameObject("/FT")] = NameObject("/Tx")
+    d[NameObject("/T")] = TextStringObject("fld")
+    d[NameObject("/Rect")] = ArrayObject([FloatObject(c) for c in (50, 700, 250, 718)])
+    d[NameObject("/AP")] = DictionaryObject()  # /AP present but no /N
+    d[NameObject("/P")] = page.indirect_reference
+    ref = w._add_object(d)
+    page[NameObject("/Annots")] = ArrayObject([ref])
+    acro = DictionaryObject()
+    acro[NameObject("/Fields")] = ArrayObject([ref])
+    w.root_object[NameObject("/AcroForm")] = w._add_object(acro)
+    buf = io.BytesIO()
+    w.write(buf)
+    filled = af.fill(buf.getvalue(), {"fld": "X"})   # fill's get_fields() must survive
+    af.flatten(filled)                                # flatten's get_fields() must survive too
