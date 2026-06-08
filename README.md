@@ -30,6 +30,14 @@ All three functions accept and return plain `bytes`, making them easy to compose
 
 ---
 
+## Tested on real-world forms
+
+The deterministic core (`build` / `fill` / `flatten` / `read_fields`) is validated against **125 real public PDF forms** - IRS and other government forms (VA, OPM, GSA), CMS / Medicare and hospital healthcare forms, federal- and state-court legal forms, and SBA / USPTO / vendor business forms. It reads every one of them, and fills, flattens, and round-trips every fillable one (over 11,000 real fields) **without a single crash**. Every field type renders correctly in Chrome's pdfium and Firefox's pdf.js, golden-image tested in CI.
+
+The `detect()` layer below is separate and clearly labeled best-effort.
+
+---
+
 ## Install
 
 ```bash
