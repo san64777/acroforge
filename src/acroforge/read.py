@@ -18,7 +18,7 @@ import io
 from typing import cast
 
 from pypdf import PdfReader
-from pypdf.generic import DictionaryObject, NumberObject
+from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, NumberObject
 
 from acroforge.models import FieldSpec, FieldType
 
@@ -26,6 +26,9 @@ from acroforge.models import FieldSpec, FieldType
 _FF_PUSHBUTTON = 1 << 16  # /Btn: it is a pushbutton, not a data field.
 _FF_RADIO = 1 << 15  # /Btn: it is a radio button (else a checkbox).
 _FF_COMB = 1 << 24  # /Tx: laid out as evenly spaced comb cells.
+_FF_COMBO = 1 << 17  # /Ch: combo box (else list box).
+_FF_EDIT = 1 << 18  # /Ch combo: editable (free text allowed).
+_FF_MULTISELECT = 1 << 21  # /Ch list box: multiple selections allowed.
 
 
 def _inherited(obj: DictionaryObject, key: str) -> object | None:
@@ -55,6 +58,34 @@ def _on_state(widget: DictionaryObject) -> str | None:
         if key != "/Off":
             return str(key).lstrip("/")
     return None
+
+
+def _parse_opt(opt: object) -> list[str] | list[tuple[str, str]] | None:
+    """Parse a ``/Ch`` ``/Opt`` array into options.
+
+    Each element is a text string (export == label) or a two-element array
+    ``[export, display]`` (PDF spec). Returns plain strings when no element has
+    a distinct label, else ``(export, label)`` pairs.
+    """
+    if opt is None:
+        return None
+    resolved = opt.get_object() if isinstance(opt, IndirectObject) else opt
+    if not isinstance(resolved, ArrayObject):
+        return None
+    plain: list[str] = []
+    pairs: list[tuple[str, str]] = []
+    any_pair = False
+    for item in resolved:
+        ob = item.get_object() if isinstance(item, IndirectObject) else item
+        if isinstance(ob, ArrayObject) and len(ob) == 2:
+            export, label = str(ob[0]), str(ob[1])
+            pairs.append((export, label))
+            plain.append(export)
+            any_pair = True
+        else:
+            pairs.append((str(ob), str(ob)))
+            plain.append(str(ob))
+    return pairs if any_pair else plain
 
 
 def read_fields(pdf: bytes | str) -> list[FieldSpec]:
@@ -100,6 +131,10 @@ def read_fields(pdf: bytes | str) -> list[FieldSpec]:
             field_type: FieldType
             export_value: str | None = None
             maxlen: int | None = None
+            options: list[str] | list[tuple[str, str]] | None = None
+            list_box = False
+            multi_select = False
+            editable = False
 
             if ftype == "/Btn":
                 if ff & _FF_PUSHBUTTON:
@@ -116,9 +151,11 @@ def read_fields(pdf: bytes | str) -> list[FieldSpec]:
             elif ftype == "/Sig":
                 field_type = FieldType.SIGNATURE
             elif ftype == "/Ch":
-                # Choice (dropdown/listbox). acroforge has no dropdown type yet,
-                # so approximate as TEXT to capture name and position.
-                field_type = FieldType.TEXT
+                field_type = FieldType.CHOICE
+                options = _parse_opt(_inherited(obj, "/Opt"))
+                list_box = not (ff & _FF_COMBO)
+                editable = bool(ff & _FF_EDIT)
+                multi_select = bool(ff & _FF_MULTISELECT)
             else:
                 continue  # unknown field type, skip.
 
@@ -128,8 +165,12 @@ def read_fields(pdf: bytes | str) -> list[FieldSpec]:
                     page=pno,
                     rect=norm_rect,
                     name=str(name),
+                    options=options,
                     maxlen=maxlen,
                     export_value=export_value,
+                    list_box=list_box,
+                    multi_select=multi_select,
+                    editable=editable,
                     confidence=1.0,
                 )
             )

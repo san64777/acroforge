@@ -31,6 +31,33 @@ from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
 from acroforge.models import FieldSpec, FieldType
 
+_FF_EDIT = 1 << 18  # /Ch combo: editable (free text allowed)
+_FF_MULTISELECT = 1 << 21  # /Ch list box: multiple selections allowed
+
+
+def _reportlab_options(options: list[str] | list[tuple[str, str]]) -> list[object]:
+    """Map acroforge options to reportlab's ``(label, value)`` tuple convention.
+
+    acroforge stores choice options as plain strings or ``(export, label)``
+    pairs. reportlab's ``choice``/``listbox`` want ``(label, value)``, so a pair
+    is reversed; a plain string passes through (export == label).
+    """
+    out: list[object] = []
+    for o in options:
+        if isinstance(o, str):
+            out.append(o)
+        else:
+            export, label = o
+            out.append((label, export))
+    return out
+
+
+def _first_export(options: list[str] | list[tuple[str, str]]) -> str:
+    """First option's export value (used as a build-time value to dodge the
+    reportlab ``lbextras`` bug; the field is blanked afterwards)."""
+    first = options[0]
+    return first if isinstance(first, str) else first[0]
+
 
 def _draw_widget(form: object, spec: FieldSpec) -> None:
     """Draw one widget onto reportlab's AcroForm overlay.
@@ -82,8 +109,35 @@ def _draw_widget(form: object, spec: FieldSpec) -> None:
             fieldFlags="comb",
             maxlen=spec.maxlen or 1,
         )
+    elif spec.type is FieldType.CHOICE:
+        options = spec.options or []
+        flags = []
+        if not spec.list_box:
+            flags.append("combo")
+        if spec.editable:
+            flags.append("edit")
+        if spec.multi_select:
+            flags.append("multiSelect")
+        # reportlab choice()/listbox() crash on a falsy value (UnboundLocalError:
+        # lbextras), so seed with the first export value; create_fields() blanks
+        # the selection afterwards so the built field starts empty.
+        draw = form.choice if not spec.list_box else form.listbox  # type: ignore[attr-defined]
+        draw(
+            name=spec.name,
+            value=_first_export(options),
+            options=_reportlab_options(options),
+            x=x0,
+            y=y0,
+            width=w,
+            height=h,
+            fontSize=max(4, min(12, h - 2)),
+            borderStyle="solid",
+            borderWidth=1,
+            forceBorder=True,
+            fieldFlags=" ".join(flags),
+        )
     else:
-        raise NotImplementedError(f"field type {spec.type} added in a later task")
+        raise NotImplementedError(f"field type {spec.type} not supported")
 
 
 def _overlay_for_page(page_w: float, page_h: float, specs: list[FieldSpec]) -> bytes:
@@ -279,6 +333,16 @@ class ReportlabPypdfWriter:
                 base_page[NameObject("/Annots")] = ArrayObject(sig_refs)
             acro[NameObject("/Fields")].extend(sig_refs)  # type: ignore[attr-defined]
 
+        # Choice fields are seeded with a default selection to work around a
+        # reportlab bug; blank them so a freshly built field starts unselected
+        # (pypdf regenerates an empty /AP for the "" value).
+        choice_names = {f.name: "" for f in fields if f.type is FieldType.CHOICE}
+        if choice_names:
+            for page in writer.pages:
+                writer.update_page_form_field_values(
+                    page, choice_names, auto_regenerate=False
+                )
+
         acro[NameObject("/NeedAppearances")] = BooleanObject(False)
         if "/XFA" in acro:
             del acro[NameObject("/XFA")]
@@ -306,6 +370,21 @@ class ReportlabPypdfWriter:
                 if name is not None:
                     field_dicts[str(name)] = fld
 
+        def _allowed_values(fld: DictionaryObject | None) -> set[str] | None:
+            # Permitted export values for a non-editable choice field, else None.
+            if fld is None or fld.get("/FT") != "/Ch":
+                return None
+            if int(fld.get("/Ff") or 0) & _FF_EDIT:
+                return None  # editable combo: free text allowed
+            opts = fld.get("/Opt")
+            if opts is None:
+                return None
+            allowed: set[str] = set()
+            for item in opts.get_object():
+                io_ = item.get_object()
+                allowed.add(str(io_[0]) if isinstance(io_, ArrayObject) else str(io_))
+            return allowed
+
         def _coerce(key: str, val: object) -> str:
             if isinstance(val, str):
                 return val
@@ -315,9 +394,40 @@ class ReportlabPypdfWriter:
                 return on if on is not None else "/Yes"
             return str(val)
 
-        str_values: dict[str, str] = {k: _coerce(k, v) for k, v in values.items()}
+        def _is_multiselect(fld: DictionaryObject | None) -> bool:
+            return (
+                fld is not None
+                and fld.get("/FT") == "/Ch"
+                and bool(int(fld.get("/Ff") or 0) & _FF_MULTISELECT)
+            )
+
+        # Build one value map: scalars for text/buttons/single-select, lists for
+        # multi-select choice. pypdf regenerates the /AP for both (so multi-select
+        # selections render and stale /I is cleared), validated against options.
+        out_values: dict[str, str | list[str]] = {}
+        for key, val in values.items():
+            fd = field_dicts.get(key)
+            allowed = _allowed_values(fd)
+            if isinstance(val, (list, tuple)):
+                if fd is not None and fd.get("/FT") == "/Ch" and not _is_multiselect(fd):
+                    raise ValueError(
+                        f"fill(): list value given for non-multi-select choice field '{key}'"
+                    )
+                items = [str(x) for x in val]
+                if allowed is not None:
+                    bad = [x for x in items if x not in allowed]
+                    if bad:
+                        raise ValueError(f"fill(): {bad} not options of choice field '{key}'")
+                out_values[key] = items
+            else:
+                s = _coerce(key, val)
+                if allowed is not None and s != "" and s not in allowed:
+                    raise ValueError(f"fill(): '{s}' is not an option of choice field '{key}'")
+                out_values[key] = s
+
         for page in writer.pages:
-            writer.update_page_form_field_values(page, str_values, auto_regenerate=False)
+            writer.update_page_form_field_values(page, out_values, auto_regenerate=False)
+
         out = io.BytesIO()
         writer.write(out)
         return out.getvalue()
@@ -330,10 +440,14 @@ class ReportlabPypdfWriter:
         # the ``fields`` mapping (the flatten path lives inside that loop), so an
         # empty mapping bakes nothing. Re-supply each field's existing ``/V`` so
         # ``flatten=True`` draws the appearance XObject into the page stream.
-        values: dict[str, str] = {}
+        values: dict[str, str | list[str]] = {}
         for name, info in (reader.get_fields() or {}).items():
             value = info.get("/V")
-            if value is not None:
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, ArrayObject)):
+                values[name] = [str(x) for x in value]  # multi-select: keep as list
+            else:
                 values[name] = value if isinstance(value, str) else str(value)
         for page in writer.pages:
             writer.update_page_form_field_values(
