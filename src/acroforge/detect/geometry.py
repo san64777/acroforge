@@ -19,6 +19,12 @@ _FIELD_HEIGHT = 16.0
 _MAX_RULE_RECT_H = 2.0
 _H_TOL = 1.5
 _V_TOL = 1.5
+# Precision filters for find_underlines (best-effort): a near-full-width rule is a
+# decorative separator, not a write-on field; rules in the top/bottom margin are
+# header/footer separators; near-coincident lines are the same field drawn twice.
+_MAX_UNDERLINE_FRAC = 0.85
+_MARGIN_FRAC = 0.04
+_DUP_Y_TOL = 3.0
 
 
 def _xy(obj: dict[str, Any]) -> tuple[float, float, float, float] | None:
@@ -103,13 +109,14 @@ def _end_near_vertical(
 
 def find_underlines(page: Any) -> list[Candidate]:
     out: list[Candidate] = []
+    pw, ph = float(page.width), float(page.height)
     segs = (
         list(page.lines)
         + [e for e in page.edges if e.get("orientation") == "h"]
         + _rule_rects(page)
     )
     verts = _vertical_segments(page)
-    seen: set[tuple[int, int, int]] = set()
+    emitted: list[tuple[float, float, float]] = []  # (x0, x1, y) of kept underlines
     for s in segs:
         c = _xy(s)
         if c is None:
@@ -118,16 +125,28 @@ def find_underlines(page: Any) -> list[Candidate]:
         if abs(y1 - y0) > _H_TOL:  # not horizontal
             continue
         y = y0
-        if (x1 - x0) < _MIN_UNDERLINE_W:
+        w = x1 - x0
+        if w < _MIN_UNDERLINE_W:
+            continue
+        # A near-full-width rule is a decorative separator, not a write-on field.
+        if w > _MAX_UNDERLINE_FRAC * pw:
+            continue
+        # Rules in the top/bottom page margin are header/footer separators.
+        if y > (1.0 - _MARGIN_FRAC) * ph or y < _MARGIN_FRAC * ph:
             continue
         # A write-on underline has OPEN ends; a table/box edge is bounded by
         # vertical rules at BOTH ends. Skip the latter.
         if _end_near_vertical(x0, y, verts) and _end_near_vertical(x1, y, verts):
             continue
-        key = (round(x0), round(x1), round(y))
-        if key in seen:
+        # Tolerant dedup: merge near-coincident lines (a line plus its rule-rect or
+        # h-edge) so one field is not detected twice or three times.
+        if any(
+            abs(ey - y) <= _DUP_Y_TOL
+            and (min(x1, ex1) - max(x0, ex0)) > 0.7 * min(w, ex1 - ex0)
+            for ex0, ex1, ey in emitted
+        ):
             continue
-        seen.add(key)
+        emitted.append((x0, x1, y))
         out.append(Candidate("text", (x0, y, x1, y + _FIELD_HEIGHT), 0.6))
     return out
 
