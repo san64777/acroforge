@@ -18,15 +18,16 @@
 
 acroforge takes any PDF - vector or scanned - and injects real AcroForm fields at positions you specify. The result is a standards-compliant fillable PDF that renders correctly in Chrome's pdfium and Firefox's pdf.js.
 
-Three operations:
+Four operations:
 
 | Operation | What it does |
 |-----------|--------------|
 | `build` | Inject interactive AcroForm fields into a flat PDF |
 | `fill` | Set field values by name on a fillable PDF |
+| `remove` | Delete specific fields by name (raises if a name is missing) |
 | `flatten` | Bake field appearances into page content; remove interactive fields |
 
-All three functions accept and return plain `bytes`, making them easy to compose in any pipeline.
+All accept and return plain `bytes`, making them easy to compose in any pipeline.
 
 ---
 
@@ -272,6 +273,30 @@ af.build(other_pdf, af.read_fields(template_pdf))
 ```
 
 (One `FieldSpec` per widget, with coordinates, type, name, and checkbox/radio on-states recovered. Dropdowns are reported as text. Pushbuttons are skipped.)
+
+## Removing fields
+
+`remove(pdf, names)` deletes specific fields by the name `read_fields` reports, so the two compose. Handy when `make_fillable` over-detects, or to strip a field before sending a form:
+
+```python
+specs = af.read_fields(pdf)
+junk = [s.name for s in specs if s.type == af.FieldType.SIGNATURE]
+clean = af.remove(pdf, junk)        # raises ValueError if any name is missing
+```
+
+Naming a radio group removes the whole group; removing the last field leaves an empty, re-usable `/AcroForm`.
+
+## Serializing a manifest
+
+`detect()` returns a `FormManifest` and `read_fields()` returns `list[FieldSpec]` - both pydantic models, so store / send-to-a-UI / round-trip them with pydantic's built-ins (no extra API to learn):
+
+```python
+data = manifest.model_dump_json()                  # -> JSON string
+manifest = FormManifest.model_validate_json(data)  # -> back to a FormManifest
+af.build(pdf, manifest.fields)                      # build from the (edited) specs
+```
+
+`(export, label)` option pairs round-trip as `[export, label]` arrays and back to tuples; generate a TypeScript type from `FormManifest.model_json_schema()`.
 
 ---
 

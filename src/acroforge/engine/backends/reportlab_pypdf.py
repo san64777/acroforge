@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import io
 from collections import Counter, defaultdict
-from typing import cast
+from collections.abc import Iterable
+from typing import Any, cast
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
@@ -263,6 +264,69 @@ def _on_state_name(field: DictionaryObject) -> str | None:
     return states.pop() if len(states) == 1 else None
 
 
+def _leaf_widget_idnums(node: DictionaryObject, seen: set[int]) -> set[int]:
+    """Object numbers of the leaf /Widget annotations under a field node."""
+    ref = node.indirect_reference
+    nid = ref.idnum if ref is not None else None
+    if nid is not None:
+        if nid in seen:
+            return set()
+        seen.add(nid)
+    kids = node.get("/Kids")
+    if not kids:
+        return {nid} if (nid is not None and node.get("/Subtype") == "/Widget") else set()
+    out: set[int] = set()
+    for k in kids:
+        out |= _leaf_widget_idnums(cast(DictionaryObject, k.get_object()), seen)
+    return out
+
+
+def _field_index(refs: Any, prefix: str, seen: set[int], out: dict[str, list[DictionaryObject]]) -> None:
+    """Map fully-qualified field name -> field node(s) by walking the /Fields tree.
+
+    A name maps to a list because a malformed form may have two distinct subtrees
+    sharing one qualified name; we must collect the widgets of all of them so the
+    /Annots surgery matches what the /Fields surgery removes (no orphan widgets).
+    """
+    for ref in refs:
+        node = cast(DictionaryObject, ref.get_object())
+        nr = node.indirect_reference
+        nid = nr.idnum if nr is not None else id(node)
+        if nid in seen:
+            continue
+        seen.add(nid)
+        t = node.get("/T")
+        if t is None:
+            continue  # a widget-only kid (e.g. a radio button): not a named field
+        qname = f"{prefix}.{t}" if prefix else str(t)
+        out.setdefault(qname, []).append(node)
+        kids = node.get("/Kids")
+        if kids:
+            subfields = [k for k in kids if cast(DictionaryObject, k.get_object()).get("/T") is not None]
+            _field_index(subfields, qname, seen, out)
+
+
+def _filter_fields(refs: Any, prefix: str, targets: set[str]) -> list[Any]:
+    """The /Fields (or /Kids) refs to keep, dropping targets and emptied parents."""
+    kept: list[Any] = []
+    for ref in refs:
+        node = cast(DictionaryObject, ref.get_object())
+        t = node.get("/T")
+        qname = (f"{prefix}.{t}" if prefix else str(t)) if t is not None else prefix
+        if t is not None and qname in targets:
+            continue  # drop this field and all its descendants
+        kids = node.get("/Kids")
+        if kids:
+            subfields = [k for k in kids if cast(DictionaryObject, k.get_object()).get("/T") is not None]
+            widget_kids = [k for k in kids if cast(DictionaryObject, k.get_object()).get("/T") is None]
+            new_kids = _filter_fields(subfields, qname, targets) + widget_kids
+            if not new_kids:
+                continue  # parent emptied -> drop it too
+            node[NameObject("/Kids")] = ArrayObject(new_kids)
+        kept.append(ref)
+    return kept
+
+
 class ReportlabPypdfWriter:
     """Writer backend: creates AcroForm fields via reportlab overlays + pypdf."""
 
@@ -503,6 +567,52 @@ class ReportlabPypdfWriter:
         root = writer.root_object
         if "/AcroForm" in root:
             del root[NameObject("/AcroForm")]
+        out = io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
+
+    def remove(self, pdf: bytes, names: str | Iterable[str]) -> bytes:
+        name_set = {names} if isinstance(names, str) else set(names)
+        if not name_set:
+            return pdf  # nothing requested: no-op
+        reader = PdfReader(io.BytesIO(pdf))
+        writer = PdfWriter()
+        writer.append(reader)
+        acro_ref = writer.root_object.get("/AcroForm")
+        acro = cast(DictionaryObject, acro_ref.get_object()) if acro_ref is not None else None
+        top_fields = list(acro.get("/Fields") or []) if acro is not None else []
+
+        # Match by fully-qualified name (what read_fields returns) over the field TREE,
+        # not just top-level /Fields - nested/XFA field names live on parent chains.
+        index: dict[str, list[DictionaryObject]] = {}
+        _field_index(top_fields, "", set(), index)
+        missing = name_set - index.keys()
+        if missing:
+            raise ValueError(f"remove(): fields not found in PDF: {sorted(missing)}")
+
+        removed_widgets: set[int] = set()
+        for qname in name_set:
+            for node in index[qname]:
+                removed_widgets |= _leaf_widget_idnums(node, set())
+
+        # /Fields surgery: drop named fields, prune any parent left with no kids.
+        if acro is not None:
+            acro[NameObject("/Fields")] = ArrayObject(_filter_fields(top_fields, "", name_set))
+
+        # /Annots surgery: drop the removed widgets from every page (match by object id;
+        # radio/hierarchical kids have no /T so they cannot be matched by name here).
+        for page in writer.pages:
+            annots = page.get("/Annots")
+            if not annots:
+                continue
+            page[NameObject("/Annots")] = ArrayObject(
+                a for a in annots if getattr(a, "idnum", None) not in removed_widgets
+            )
+
+        # XFA would now describe fields that no longer exist; drop it (as build/flatten do).
+        if acro is not None and "/XFA" in acro:
+            del acro[NameObject("/XFA")]
+
         out = io.BytesIO()
         writer.write(out)
         return out.getvalue()
