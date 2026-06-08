@@ -49,6 +49,27 @@ def _inherited(obj: DictionaryObject, key: str) -> object | None:
     return None
 
 
+def _qualified_name(obj: DictionaryObject) -> str | None:
+    """Fully-qualified field name: the ``/T`` chain root-to-leaf joined by ``.``.
+
+    This is the name a viewer (and ``fill``) addresses the field by. A flat field
+    with no ``/T``-bearing ancestors qualifies to its own ``/T``; a widget nested
+    under parent fields (common in real/XFA forms) qualifies to ``parent.child``.
+    Returns None for an unnamed widget. Guards against a circular ``/Parent``.
+    """
+    parts: list[str] = []
+    cur: DictionaryObject | None = obj
+    seen: set[int] = set()
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        t = cur.get("/T")
+        if t is not None:
+            parts.append(str(t))
+        parent = cur.get("/Parent")
+        cur = cast(DictionaryObject, parent.get_object()) if parent is not None else None
+    return ".".join(reversed(parts)) if parts else None
+
+
 def _on_state(widget: DictionaryObject) -> str | None:
     """Return this widget's on-state name: the ``/AP /N`` key that is not ``/Off``.
 
@@ -97,7 +118,7 @@ def _parse_opt(opt: object) -> list[str] | list[tuple[str, str]] | None:
 
 def _spec_from_widget(obj: DictionaryObject, pno: int) -> FieldSpec | None:
     """Reconstruct a FieldSpec from one ``/Widget`` annotation, or None to skip it."""
-    name = _inherited(obj, "/T")
+    name = _qualified_name(obj)
     if name is None:
         return None  # unnamed widget: nothing to address it by.
 
