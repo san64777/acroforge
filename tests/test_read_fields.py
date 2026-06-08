@@ -44,6 +44,47 @@ def test_read_then_rebuild_roundtrip():
     assert {"full_name", "agree", "ssn"} <= names
 
 
+def _flatten_opts(opts):
+    return [o if isinstance(o, str) else o[0] for o in (opts or [])]
+
+
+def test_read_fields_dropdown_roundtrip():
+    f = af.FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 700, 300, 720),
+                     name="state", options=["CA", "NY", "TX"])
+    spec = [s for s in af.read_fields(af.build(_blank_pdf(), [f])) if s.name == "state"][0]
+    assert spec.type == FieldType.CHOICE
+    assert spec.list_box is False and spec.editable is False
+    assert set(_flatten_opts(spec.options)) == {"CA", "NY", "TX"}
+
+
+def test_read_fields_listbox_roundtrip():
+    f = af.FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 620, 260, 700),
+                     name="colors", options=["Red", "Green", "Blue"], list_box=True)
+    spec = [s for s in af.read_fields(af.build(_blank_pdf(), [f])) if s.name == "colors"][0]
+    assert spec.type == FieldType.CHOICE and spec.list_box is True
+
+
+def test_read_fields_editable_roundtrip():
+    f = af.FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 560, 300, 580),
+                     name="city", options=["NYC", "LA"], editable=True)
+    spec = [s for s in af.read_fields(af.build(_blank_pdf(), [f])) if s.name == "city"][0]
+    assert spec.editable is True and spec.list_box is False
+
+
+def test_read_fields_multi_select_roundtrip():
+    f = af.FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 500, 260, 560),
+                     name="langs", options=["en", "fr"], list_box=True, multi_select=True)
+    spec = [s for s in af.read_fields(af.build(_blank_pdf(), [f])) if s.name == "langs"][0]
+    assert spec.multi_select is True and spec.list_box is True
+
+
+def test_read_fields_pairs_roundtrip():
+    f = af.FieldSpec(type=FieldType.CHOICE, page=0, rect=(100, 700, 300, 720),
+                     name="st", options=[("CA", "California"), ("NY", "New York")])
+    spec = [s for s in af.read_fields(af.build(_blank_pdf(), [f])) if s.name == "st"][0]
+    assert ("CA", "California") in spec.options
+
+
 def test_read_fields_radio_roundtrip():
     fields = [
         af.FieldSpec(type=FieldType.RADIO, page=0, rect=(100, 700, 114, 714), name="sex", export_value="M"),
