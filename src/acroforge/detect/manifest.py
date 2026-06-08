@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import warnings
 from typing import Any
 
 import pdfplumber
@@ -39,10 +40,57 @@ def _words_bottom_up(page: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _detect_page(page: Any, pno: int) -> list[FieldSpec]:
+    """Detect all candidate fields on a single (non-scanned) page."""
+    words = _words_bottom_up(page)
+    fields: list[FieldSpec] = []
+
+    # Track rounded positions of text fields to dedup table cells vs underlines.
+    text_positions: set[tuple[int, int]] = set()
+
+    for i, cand in enumerate(find_underlines(page)):
+        name = name_for(cand.rect, words, fallback=f"text_{pno}_{i}")
+        text_positions.add((round(cand.rect[0]), round(cand.rect[1])))
+        fields.append(
+            FieldSpec(
+                type=FieldType.TEXT, page=pno, rect=cand.rect, name=name,
+                confidence=cand.confidence,
+            )
+        )
+
+    for ci, (cand, label) in enumerate(find_table_cells(page)):
+        pos = (round(cand.rect[0]), round(cand.rect[1]))
+        if pos in text_positions:
+            continue  # already detected at ~this position (e.g. an underline)
+        text_positions.add(pos)
+        name = label or name_for(cand.rect, words, fallback=f"cell_{pno}_{ci}")
+        fields.append(
+            FieldSpec(
+                type=FieldType.TEXT, page=pno, rect=cand.rect, name=name,
+                confidence=cand.confidence,
+            )
+        )
+
+    boxes = find_boxes(page) + find_glyph_checkboxes(page)
+    for gi, group in enumerate(group_checkboxes(boxes)):
+        for bi, cand in enumerate(group):
+            name = name_for(cand.rect, words, fallback=f"checkbox_{pno}_{gi}_{bi}")
+            fields.append(
+                FieldSpec(
+                    type=FieldType.CHECKBOX, page=pno, rect=cand.rect, name=name,
+                    confidence=cand.confidence,
+                )
+            )
+    return fields
+
+
 def detect_manifest(pdf: str | bytes) -> FormManifest:
     """Orchestrate geometry + grouping + naming into a FormManifest.
 
-    Refuses scanned (image-only) pages by raising ScannedPDFError.
+    Best-effort and resilient per CLAUDE.md rule 3: an image-only page or a page
+    that errors during detection is skipped with a ``warnings.warn`` and the rest
+    of the document is still processed. ``ScannedPDFError`` is raised only when
+    *every* page is image-only (preserving the scanned-PDF refusal, Gate C).
     """
     if isinstance(pdf, bytes):
         source = "<bytes>"
@@ -52,57 +100,26 @@ def detect_manifest(pdf: str | bytes) -> FormManifest:
         handle = pdf
 
     fields: list[FieldSpec] = []
+    scanned_pages: list[int] = []
     with pdfplumber.open(handle) as doc:
+        n_pages = len(doc.pages)
         for pno, page in enumerate(doc.pages):
             if is_scanned_page(page):
-                raise ScannedPDFError(f"page {pno} is image-only; auto-detection refused")
-
-            words = _words_bottom_up(page)
-
-            # Track rounded positions of text fields to dedup table cells vs underlines.
-            text_positions: set[tuple[int, int]] = set()
-
-            for i, cand in enumerate(find_underlines(page)):
-                name = name_for(cand.rect, words, fallback=f"text_{pno}_{i}")
-                text_positions.add((round(cand.rect[0]), round(cand.rect[1])))
-                fields.append(
-                    FieldSpec(
-                        type=FieldType.TEXT,
-                        page=pno,
-                        rect=cand.rect,
-                        name=name,
-                        confidence=cand.confidence,
-                    )
+                scanned_pages.append(pno)
+                warnings.warn(
+                    f"acroforge: page {pno} is image-only; skipped (no fields detected there)",
+                    stacklevel=2,
                 )
-
-            for ci, (cand, label) in enumerate(find_table_cells(page)):
-                pos = (round(cand.rect[0]), round(cand.rect[1]))
-                if pos in text_positions:
-                    continue  # already detected at ~this position (e.g. an underline)
-                text_positions.add(pos)
-                name = label or name_for(cand.rect, words, fallback=f"cell_{pno}_{ci}")
-                fields.append(
-                    FieldSpec(
-                        type=FieldType.TEXT,
-                        page=pno,
-                        rect=cand.rect,
-                        name=name,
-                        confidence=cand.confidence,
-                    )
+                continue
+            try:
+                fields.extend(_detect_page(page, pno))
+            except Exception as exc:  # noqa: BLE001 - one bad page must not abort the rest
+                warnings.warn(
+                    f"acroforge: page {pno} detection skipped ({type(exc).__name__}: {exc})",
+                    stacklevel=2,
                 )
+                continue
 
-            boxes = find_boxes(page) + find_glyph_checkboxes(page)
-            for gi, group in enumerate(group_checkboxes(boxes)):
-                for bi, cand in enumerate(group):
-                    name = name_for(cand.rect, words, fallback=f"checkbox_{pno}_{gi}_{bi}")
-                    fields.append(
-                        FieldSpec(
-                            type=FieldType.CHECKBOX,
-                            page=pno,
-                            rect=cand.rect,
-                            name=name,
-                            confidence=cand.confidence,
-                        )
-                    )
-
+    if n_pages > 0 and len(scanned_pages) == n_pages:
+        raise ScannedPDFError(f"all {n_pages} page(s) are image-only; auto-detection refused")
     return FormManifest(source=source, fields=fields)
