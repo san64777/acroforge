@@ -153,6 +153,7 @@ acroforge flatten filled.pdf final.pdf
 | Checkbox | `FieldType.CHECKBOX` | `export_value` is the on-state value (default `"Yes"`) |
 | Radio button | `FieldType.RADIO` | One `FieldSpec` per button; share `name`, set `export_value` per button |
 | Signature | `FieldType.SIGNATURE` | Placeholder widget - renders a blank sig box |
+| Dropdown / list box | `FieldType.CHOICE` | `options` lists the choices; `list_box`, `multi_select`, `editable` flags (see note) |
 
 ### `FieldSpec` reference
 
@@ -162,11 +163,37 @@ class FieldSpec(BaseModel):
     page: int                                    # 0-indexed
     rect: tuple[float, float, float, float]      # (x0, y0, x1, y1) in PDF points
     name: str                                    # AcroForm field name
-    options: list[str] | None = None             # radio group member labels
+    options: list[str] | list[tuple[str, str]] | None = None  # choice options (str or (export, label))
     maxlen: int | None = None                    # TEXT cap / COMB cell count
     export_value: str | None = None              # radio/checkbox on-value
+    list_box: bool = False                       # CHOICE: False=dropdown, True=list box
+    multi_select: bool = False                   # CHOICE list box: allow multiple selections
+    editable: bool = False                       # CHOICE combo: accept free-typed text
     confidence: float = 1.0                      # 1.0 = explicit; <1.0 = best-effort guess
 ```
+
+### Dropdowns and list boxes (`FieldType.CHOICE`)
+
+```python
+# dropdown (combo box)
+FieldSpec(type=FieldType.CHOICE, page=0, rect=(200, 620, 360, 640),
+          name="state", options=["CA", "NY", "TX"])
+
+# (export, label) pairs: store "CA", display "California"
+FieldSpec(type=FieldType.CHOICE, page=0, rect=(200, 580, 360, 600),
+          name="st", options=[("CA", "California"), ("NY", "New York")])
+
+# scrolling list box, multi-select
+FieldSpec(type=FieldType.CHOICE, page=0, rect=(200, 500, 360, 570),
+          name="langs", options=["en", "fr", "de"], list_box=True, multi_select=True)
+```
+
+All four variants - dropdown, single-select list box, editable dropdown, and
+multi-select list box - are cross-viewer verified: the selected value renders in
+both pdfium and pdf.js. `read_fields` recovers a choice field's structure (its
+options and the `list_box` / `multi_select` / `editable` flags); it does not
+recover the current selection, since a `FieldSpec` describes the field, not its
+filled value.
 
 ---
 
