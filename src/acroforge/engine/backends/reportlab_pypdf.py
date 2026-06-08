@@ -59,6 +59,28 @@ def _first_export(options: list[str] | list[tuple[str, str]]) -> str:
     return first if isinstance(first, str) else first[0]
 
 
+def _choice_font_size(spec: FieldSpec, h: float) -> float:
+    """Font size for a choice widget's appearance.
+
+    A list box needs the rect tall enough to fit at least one option row:
+    reportlab computes ``nopts = int((h - 4*bw) / (1.2*fontSize))`` and then
+    divides by ``nopts`` (a 0 is a ZeroDivisionError). Shrink the font so a row
+    fits; raise a clear error if the rect is fundamentally too short. Dropdowns
+    (combo boxes) do not hit this path, so they keep the simple sizing.
+    """
+    fs = max(4.0, min(12.0, h - 2))
+    if spec.list_box:
+        avail = h - 4.0  # height minus 4*borderWidth (borderWidth == 1)
+        if 1.2 * fs > avail:
+            fs = avail / 1.3  # shrink so >= 1 row fits, with float-rounding margin
+        if fs < 2:
+            raise ValueError(
+                f"CHOICE list box '{spec.name}' rect height {h:.0f}pt is too short to render "
+                f"an option row; increase its height or use a dropdown (list_box=False)"
+            )
+    return fs
+
+
 def _draw_widget(form: object, spec: FieldSpec) -> None:
     """Draw one widget onto reportlab's AcroForm overlay.
 
@@ -130,7 +152,7 @@ def _draw_widget(form: object, spec: FieldSpec) -> None:
             y=y0,
             width=w,
             height=h,
-            fontSize=max(4, min(12, h - 2)),
+            fontSize=_choice_font_size(spec, h),
             borderStyle="solid",
             borderWidth=1,
             forceBorder=True,
