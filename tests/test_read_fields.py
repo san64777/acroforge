@@ -184,6 +184,52 @@ def test_read_fields_foreign_authored_choice():
     assert specs["inherited"].options == ["i1", "i2"]
 
 
+def test_read_fields_returns_qualified_fillable_name():
+    """A widget nested under a parent field reads back as the fully-qualified
+    'parent.child' name, so read_fields output is usable by fill() (real-world
+    forms: read_fields used to return the leaf name, which fill could not address)."""
+    import io as _io
+
+    import pypdf
+    from pypdf import PdfWriter
+    from pypdf.generic import (
+        ArrayObject,
+        DictionaryObject,
+        FloatObject,
+        NameObject,
+        TextStringObject,
+    )
+
+    w = PdfWriter()
+    w.add_blank_page(width=612, height=792)
+    page = w.pages[0]
+    parent = DictionaryObject()
+    parent[NameObject("/FT")] = NameObject("/Tx")
+    parent[NameObject("/T")] = TextStringObject("form")
+    parent_ref = w._add_object(parent)
+    kid = DictionaryObject()
+    kid[NameObject("/Type")] = NameObject("/Annot")
+    kid[NameObject("/Subtype")] = NameObject("/Widget")
+    kid[NameObject("/T")] = TextStringObject("name")
+    kid[NameObject("/Rect")] = ArrayObject([FloatObject(c) for c in (50, 700, 250, 718)])
+    kid[NameObject("/P")] = page.indirect_reference
+    kid[NameObject("/Parent")] = parent_ref
+    kid_ref = w._add_object(kid)
+    parent[NameObject("/Kids")] = ArrayObject([kid_ref])
+    page[NameObject("/Annots")] = ArrayObject([kid_ref])
+    acro = DictionaryObject()
+    acro[NameObject("/Fields")] = ArrayObject([parent_ref])
+    w.root_object[NameObject("/AcroForm")] = w._add_object(acro)
+    buf = _io.BytesIO()
+    w.write(buf)
+    data = buf.getvalue()
+
+    spec = [s for s in af.read_fields(data) if s.type == FieldType.TEXT][0]
+    assert spec.name == "form.name"   # qualified, not the leaf "name"
+    filled = af.fill(data, {spec.name: "VALUE"})   # the read name must be fill-addressable
+    assert "form.name" in (pypdf.PdfReader(_io.BytesIO(filled)).get_fields() or {})
+
+
 def test_read_fields_radio_roundtrip():
     fields = [
         af.FieldSpec(type=FieldType.RADIO, page=0, rect=(100, 700, 114, 714), name="sex", export_value="M"),

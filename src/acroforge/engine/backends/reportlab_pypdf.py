@@ -12,7 +12,7 @@ is forced off (embedded ``/AP`` is authoritative) and any ``/XFA`` is dropped.
 from __future__ import annotations
 
 import io
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import cast
 
 from pypdf import PdfReader, PdfWriter
@@ -270,6 +270,18 @@ class ReportlabPypdfWriter:
         if not fields:
             return pdf  # no-op: don't synthesize an empty /AcroForm
 
+        # reportlab raises (at write time) on a radio group with a single button.
+        # A 1-member radio group is functionally a checkbox - convert it so real
+        # forms with single-button radios don't crash build().
+        radio_counts = Counter(f.name for f in fields if f.type is FieldType.RADIO)
+        if any(c == 1 for c in radio_counts.values()):
+            fields = [
+                f.model_copy(update={"type": FieldType.CHECKBOX})
+                if (f.type is FieldType.RADIO and radio_counts[f.name] == 1)
+                else f
+                for f in fields
+            ]
+
         writer = PdfWriter()
         writer.append(PdfReader(io.BytesIO(pdf)))
 
@@ -377,10 +389,14 @@ class ReportlabPypdfWriter:
         reader = PdfReader(io.BytesIO(pdf))
         writer = PdfWriter()
         writer.append(reader)
-        existing = set(reader.get_fields() or {})
-        unknown = set(values) - existing
-        if unknown:
-            raise ValueError(f"fill(): fields not found in PDF: {sorted(unknown)}")
+        try:
+            existing: set[str] | None = set(reader.get_fields() or {})
+        except Exception:  # noqa: BLE001 - malformed field dict (e.g. /AP without /N): skip the pre-check
+            existing = None
+        if existing is not None:
+            unknown = set(values) - existing
+            if unknown:
+                raise ValueError(f"fill(): fields not found in PDF: {sorted(unknown)}")
         # Map field name -> its AcroForm field dict so a boolean True resolves to
         # the field's real on-state (e.g. /On, /Checked) rather than a hard /Yes.
         field_dicts: dict[str, DictionaryObject] = {}
@@ -457,7 +473,11 @@ class ReportlabPypdfWriter:
 
     def flatten(self, pdf: bytes) -> bytes:
         reader = PdfReader(io.BytesIO(pdf))
-        if not (reader.get_fields() or {}):
+        try:
+            fields = reader.get_fields() or {}
+        except Exception:  # noqa: BLE001 - malformed field dict (e.g. /AP without /N)
+            fields = {}
+        if not fields and "/AcroForm" not in reader.root_object:
             return pdf  # no form fields: nothing to bake, return unchanged
         writer = PdfWriter()
         writer.append(reader)
@@ -466,7 +486,7 @@ class ReportlabPypdfWriter:
         # empty mapping bakes nothing. Re-supply each field's existing ``/V`` so
         # ``flatten=True`` draws the appearance XObject into the page stream.
         values: dict[str, str | list[str]] = {}
-        for name, info in (reader.get_fields() or {}).items():
+        for name, info in fields.items():
             value = info.get("/V")
             if value is None:
                 continue

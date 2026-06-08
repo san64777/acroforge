@@ -17,6 +17,8 @@ spikes/*.pdf
 spikes/*.png
 # tooling artifacts (MCP plugins etc.)
 .playwright-mcp/
+# real-world QA form corpus (downloaded for testing; never commit)
+realforms/
 
 # demo output artifacts
 examples/output/
