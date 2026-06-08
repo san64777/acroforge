@@ -45,12 +45,17 @@ def _detect_page(page: Any, pno: int) -> list[FieldSpec]:
     words = _words_bottom_up(page)
     fields: list[FieldSpec] = []
 
-    # Track rounded positions of text fields to dedup table cells vs underlines.
-    text_positions: set[tuple[int, int]] = set()
+    # Track text-field positions to dedup table cells against underlines, with a
+    # small tolerance so an underline and a near-coincident table-cell edge that
+    # describe the same field are not both emitted as separate guesses.
+    text_positions: list[tuple[float, float]] = []
+
+    def _near(x: float, y: float, tol: float = 6.0) -> bool:
+        return any(abs(px - x) <= tol and abs(py - y) <= tol for px, py in text_positions)
 
     for i, cand in enumerate(find_underlines(page)):
         name = name_for(cand.rect, words, fallback=f"text_{pno}_{i}")
-        text_positions.add((round(cand.rect[0]), round(cand.rect[1])))
+        text_positions.append((cand.rect[0], cand.rect[1]))
         fields.append(
             FieldSpec(
                 type=FieldType.TEXT, page=pno, rect=cand.rect, name=name,
@@ -59,10 +64,9 @@ def _detect_page(page: Any, pno: int) -> list[FieldSpec]:
         )
 
     for ci, (cand, label) in enumerate(find_table_cells(page)):
-        pos = (round(cand.rect[0]), round(cand.rect[1]))
-        if pos in text_positions:
+        if _near(cand.rect[0], cand.rect[1]):
             continue  # already detected at ~this position (e.g. an underline)
-        text_positions.add(pos)
+        text_positions.append((cand.rect[0], cand.rect[1]))
         name = label or name_for(cand.rect, words, fallback=f"cell_{pno}_{ci}")
         fields.append(
             FieldSpec(
