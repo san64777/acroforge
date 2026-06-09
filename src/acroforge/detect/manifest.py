@@ -91,7 +91,7 @@ def _detect_page(page: Any, pno: int) -> list[FieldSpec]:
 def detect_manifest(pdf: str | bytes) -> FormManifest:
     """Orchestrate geometry + grouping + naming into a FormManifest.
 
-    Best-effort and resilient per CLAUDE.md rule 3: an image-only page or a page
+    Best-effort and resilient by design: an image-only page or a page
     that errors during detection is skipped with a ``warnings.warn`` and the rest
     of the document is still processed. ``ScannedPDFError`` is raised only when
     *every* page is image-only (preserving the scanned-PDF refusal, Gate C).

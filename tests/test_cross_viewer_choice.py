@@ -2,7 +2,7 @@
 
 Each test renders the SAME field built-but-empty vs filled, and asserts the two
 differ. That proves the selected value itself renders (not merely that a border
-box appears) - the contract from CLAUDE.md rule 4. All four variants (dropdown,
+box appears) - the cross-viewer rendering contract. All four variants (dropdown,
 list box, editable, multi-select) are verified in both engines.
 """
 
